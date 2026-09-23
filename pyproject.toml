@@ -1,0 +1,17 @@
+[project]
+name = "py-plaque-inc"
+version = "0.1.0"
+description = "A python game adaptation of the game plaque inc."
+readme = "README.md"
+authors = [
+    { name = "Daniel Rösch", email = "droesch91@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+py-plaque-inc = "py_plaque_inc:main"
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"
