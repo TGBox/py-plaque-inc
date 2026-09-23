@@ -1,0 +1,454 @@
+"""Evolutions- und Upgrade-System (Übertragung, Symptome, Fähigkeiten)."""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Dict, Optional
+
+
+class UpgradeCategory(str, Enum):
+    TRANSMISSION = "Übertragung"
+    SYMPTOMS = "Symptome"
+    ABILITIES = "Fähigkeiten"
+
+
+@dataclass
+class Upgrade:
+    id: str
+    name: str
+    category: UpgradeCategory
+    cost: int
+    description: str
+    # Modifikatoren
+    infectivity: float = 0.0
+    severity: float = 0.0
+    lethality: float = 0.0
+    cold_res: float = 0.0
+    heat_res: float = 0.0
+    drug_res: float = 0.0
+    cure_slow: float = 0.0
+    # Baum-Beziehungen & UI-Layout (Grid-Koordinaten x: 0..6, y: 0..4)
+    grid_pos: tuple[int, int] = (0, 0)
+    requires: List[str] = field(default_factory=list)
+    unlocked: bool = False
+    is_pathogen_exclusive: Optional[str] = None  # z.B. "fungus", "virus", "bacteria"
+
+
+def get_default_upgrades() -> Dict[str, Upgrade]:
+    """Erstellt den vollständigen Evolutionskatalog."""
+    upgrades: List[Upgrade] = [
+        # ==========================================
+        # 1. ÜBERTRAGUNG (Transmission)
+        # ==========================================
+        Upgrade(
+            id="trans_air_1",
+            name="Luft I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=9,
+            description="Erreger überlebt in feinen Speicheltröpfchen. Steigert Übertragung durch Luftverkehr und trockene Regionen.",
+            infectivity=1.2,
+            grid_pos=(2, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="trans_air_2",
+            name="Luft II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=14,
+            description="Organismus widersteht Flugzeug-Filtern. Massiv erhöhte Ansteckung im Flugverkehr.",
+            infectivity=2.2,
+            grid_pos=(2, 0),
+            requires=["trans_air_1"],
+        ),
+        Upgrade(
+            id="trans_water_1",
+            name="Wasser I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=9,
+            description="Erreger überdauert außerhalb des Wirts in Süß- und Salzwasser. Begünstigt feuchte Gebiete und Schiffsrouten.",
+            infectivity=1.2,
+            grid_pos=(4, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="trans_water_2",
+            name="Wasser II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=14,
+            description="Resistenz gegen Wasserchlorung und Filter. Extreme Ausbreitung über Hafenstädte und Schiffe.",
+            infectivity=2.2,
+            grid_pos=(4, 0),
+            requires=["trans_water_1"],
+        ),
+        Upgrade(
+            id="trans_aerosol",
+            name="Bio-Aerosol",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=22,
+            description="Kombination aus Luft II und Wasser II. Erreger nutzt mikroskopische Partikel. Schiffe und Flugzeuge können sich kaum noch schützen.",
+            infectivity=4.0,
+            grid_pos=(3, 0),
+            requires=["trans_air_2", "trans_water_2"],
+        ),
+        Upgrade(
+            id="trans_bird_1",
+            name="Vögel I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=11,
+            description="Zugvögel tragen das Pathogen über Kontinente und Landesgrenzen hinweg.",
+            infectivity=1.5,
+            grid_pos=(1, 2),
+            requires=["trans_air_1"],
+        ),
+        Upgrade(
+            id="trans_bird_2",
+            name="Vögel II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=17,
+            description="Hirnveränderung bei Vögeln führt zu Massenflügen in dicht besiedelte Ballungsräume.",
+            infectivity=2.8,
+            grid_pos=(0, 2),
+            requires=["trans_bird_1"],
+        ),
+        Upgrade(
+            id="trans_rodent_1",
+            name="Nagetiere I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=10,
+            description="Flöhe und Ratten in Städten übertragen den Erreger schnell in Ballungszentren.",
+            infectivity=1.4,
+            grid_pos=(5, 2),
+            requires=["trans_water_1"],
+        ),
+        Upgrade(
+            id="trans_rodent_2",
+            name="Nagetiere II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=16,
+            description="Nagetiere vermehren sich trotz Infektion und dringen in Wohngebäude ein.",
+            infectivity=2.6,
+            grid_pos=(6, 2),
+            requires=["trans_rodent_1"],
+        ),
+        Upgrade(
+            id="trans_blood_1",
+            name="Blut I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=12,
+            description="Übertragung durch Kontakt mit Blut und Körperflüssigkeiten. Begünstigt arme Regionen mit schlechter medizinischer Versorgung.",
+            infectivity=1.6,
+            grid_pos=(2, 3),
+            requires=[],
+        ),
+        Upgrade(
+            id="trans_blood_2",
+            name="Blut II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=18,
+            description="Der Erreger durchdringt Schleimhäute. Hohe Infektionsgefahr bei jedem physischen Kontakt.",
+            infectivity=2.7,
+            grid_pos=(2, 4),
+            requires=["trans_blood_1"],
+        ),
+        Upgrade(
+            id="trans_insect_1",
+            name="Insekten I",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=12,
+            description="Stechmücken und Zecken werden zu Vektoren. Massive Ausbreitung in heißen und feuchten Regionen.",
+            infectivity=1.7,
+            grid_pos=(4, 3),
+            requires=[],
+        ),
+        Upgrade(
+            id="trans_insect_2",
+            name="Insekten II",
+            category=UpgradeCategory.TRANSMISSION,
+            cost=19,
+            description="Insektenstiche übertragen Milliarden Erreger gleichzeitig. Extrem aggressiv in tropischen Breitengraden.",
+            infectivity=3.0,
+            grid_pos=(4, 4),
+            requires=["trans_insect_1"],
+        ),
+
+        # ==========================================
+        # 2. SYMPTOME (Symptoms)
+        # ==========================================
+        Upgrade(
+            id="symp_nausea",
+            name="Übelkeit",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=4,
+            description="Magenreizung führt zu Unwohlsein. Leichte Erhöhung der Infektiosität durch Erbrechen.",
+            infectivity=0.8,
+            severity=0.5,
+            grid_pos=(2, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="symp_vomiting",
+            name="Erbrechen",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=9,
+            description="Häufiges Erbrechen verteilt Erreger in der Umgebung und begünstigt arme Länder.",
+            infectivity=1.8,
+            severity=1.2,
+            grid_pos=(1, 1),
+            requires=["symp_nausea"],
+        ),
+        Upgrade(
+            id="symp_coughing",
+            name="Husten",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=4,
+            description="Schleimhusten verteilt den Erreger durch Tröpfcheninfektion in dicht besiedelten Gebieten.",
+            infectivity=1.2,
+            severity=0.4,
+            grid_pos=(3, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="symp_sneezing",
+            name="Niesen",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=6,
+            description="Kräftige Niesanfälle schleudern Partikel meterweit durch die Luft.",
+            infectivity=1.6,
+            severity=0.6,
+            grid_pos=(4, 1),
+            requires=["symp_coughing"],
+        ),
+        Upgrade(
+            id="symp_pneumonia",
+            name="Lungenentzündung",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=12,
+            description="Entzündung der Lungenbläschen. Sehr gefährlich in kalten Regionen.",
+            infectivity=1.5,
+            severity=2.0,
+            lethality=0.8,
+            cold_res=0.1,
+            grid_pos=(3, 0),
+            requires=["symp_coughing", "symp_sneezing"],
+        ),
+        Upgrade(
+            id="symp_rash",
+            name="Hautausschlag",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=5,
+            description="Schmerzhafte Flecken auf der Haut. Leicht erhöhte Ansteckung bei Berührung.",
+            infectivity=1.0,
+            severity=0.5,
+            grid_pos=(4, 2),
+            requires=[],
+        ),
+        Upgrade(
+            id="symp_sweating",
+            name="Schweißausbrüche",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=7,
+            description="Heftiges Schwitzen dehydriert Patienten und erhöht die Übertragungschancen.",
+            infectivity=1.3,
+            severity=0.8,
+            grid_pos=(5, 2),
+            requires=["symp_rash"],
+        ),
+        Upgrade(
+            id="symp_insomnia",
+            name="Schlaflosigkeit",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=5,
+            description="Chronische Schlafstörung schwächt die Immunabwehr und verlangsamt die Heilmittelforschung leicht.",
+            severity=1.0,
+            cure_slow=0.08,
+            grid_pos=(2, 2),
+            requires=[],
+        ),
+        Upgrade(
+            id="symp_paranoia",
+            name="Paranoia",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=10,
+            description="Wahnvorstellungen führen zu Misstrauen gegenüber Behörden und Ärzten. Verringert weltweite Zusammenarbeit.",
+            severity=2.5,
+            cure_slow=0.18,
+            grid_pos=(1, 2),
+            requires=["symp_insomnia"],
+        ),
+        Upgrade(
+            id="symp_organ_failure",
+            name="Organversagen",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=24,
+            description="Entzündung multipler Organsysteme führt zu fatalen Komplikationen.",
+            severity=4.0,
+            lethality=3.2,
+            grid_pos=(2, 3),
+            requires=["symp_vomiting", "symp_pneumonia"],
+        ),
+        Upgrade(
+            id="symp_hemorrhagic_shock",
+            name="Hämorrhagischer Schock",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=30,
+            description="Innere Blutungen und Kreislaufzusammenbruch. Enorme Todesrate.",
+            infectivity=1.5,
+            severity=5.0,
+            lethality=4.8,
+            grid_pos=(4, 3),
+            requires=["symp_rash", "symp_sweating"],
+        ),
+        Upgrade(
+            id="symp_total_organ_failure",
+            name="Totales Organversagen",
+            category=UpgradeCategory.SYMPTOMS,
+            cost=38,
+            description="Schlagartiger Ausfall aller lebenswichtigen Vitalfunktionen. Extrem tödlich.",
+            severity=6.0,
+            lethality=7.5,
+            grid_pos=(3, 4),
+            requires=["symp_organ_failure", "symp_hemorrhagic_shock"],
+        ),
+
+        # ==========================================
+        # 3. FÄHIGKEITEN (Abilities)
+        # ==========================================
+        Upgrade(
+            id="ab_cold_1",
+            name="Kälteresistenz I",
+            category=UpgradeCategory.ABILITIES,
+            cost=10,
+            description="Erreger bildet zähe Membranen, um niedrigen Temperaturen in Russland, Kanada und Skandinavien zu trotzen.",
+            cold_res=0.4,
+            grid_pos=(1, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="ab_cold_2",
+            name="Kälteresistenz II",
+            category=UpgradeCategory.ABILITIES,
+            cost=16,
+            description="Gefrierschutz-Proteine ermöglichen maximale Infektionskraft selbst in subarktischen Regionen wie Grönland.",
+            cold_res=0.8,
+            grid_pos=(1, 0),
+            requires=["ab_cold_1"],
+        ),
+        Upgrade(
+            id="ab_heat_1",
+            name="Hitzeresistenz I",
+            category=UpgradeCategory.ABILITIES,
+            cost=10,
+            description="Hitzeschock-Moleküle schützen den Erreger vor Austrocknung in Afrika, Nahost und Südamerika.",
+            heat_res=0.4,
+            grid_pos=(5, 1),
+            requires=[],
+        ),
+        Upgrade(
+            id="ab_heat_2",
+            name="Hitzeresistenz II",
+            category=UpgradeCategory.ABILITIES,
+            cost=16,
+            description="Thermostabile Proteinstrukturen garantieren Ausbreitung in heißesten Wüsten und Tropen.",
+            heat_res=0.8,
+            grid_pos=(5, 0),
+            requires=["ab_heat_1"],
+        ),
+        Upgrade(
+            id="ab_drug_1",
+            name="Arzneimittelresistenz I",
+            category=UpgradeCategory.ABILITIES,
+            cost=12,
+            description="Resistenz gegen Standard-Antibiotika und antivirale Basismedikamente in wohlhabenden Ländern.",
+            drug_res=0.4,
+            cure_slow=0.1,
+            grid_pos=(2, 2),
+            requires=[],
+        ),
+        Upgrade(
+            id="ab_drug_2",
+            name="Arzneimittelresistenz II",
+            category=UpgradeCategory.ABILITIES,
+            cost=21,
+            description="Schützt den Erreger vor Reservemedikamenten. Erhöht die Ausbreitungschancen in reichen Ländern drastisch.",
+            drug_res=0.85,
+            cure_slow=0.2,
+            grid_pos=(2, 3),
+            requires=["ab_drug_1"],
+        ),
+        Upgrade(
+            id="ab_hardening_1",
+            name="Genetische Härtung I",
+            category=UpgradeCategory.ABILITIES,
+            cost=15,
+            description="Verstärkt die DNA-Stabilität. Verlangsamt die internationale Heilmittelforschung.",
+            cure_slow=0.25,
+            grid_pos=(4, 2),
+            requires=[],
+        ),
+        Upgrade(
+            id="ab_hardening_2",
+            name="Genetische Härtung II",
+            category=UpgradeCategory.ABILITIES,
+            cost=24,
+            description="Erreger zersetzt sich in Laborzentrifugen und entzieht sich Analyseverfahren.",
+            cure_slow=0.45,
+            grid_pos=(4, 3),
+            requires=["ab_hardening_1"],
+        ),
+        Upgrade(
+            id="ab_reshuffle",
+            name="Gen-Umstrukturierung",
+            category=UpgradeCategory.ABILITIES,
+            cost=26,
+            description="Bruchartige Umordnung der Gensequenzen. Wirft den weltweiten Heilmittelfortschritt um 15% zurück.",
+            cure_slow=0.35,
+            grid_pos=(3, 3),
+            requires=["ab_drug_1", "ab_hardening_1"],
+        ),
+
+        # Spezialfähigkeiten je nach Pathogentyp
+        Upgrade(
+            id="spec_bacteria_shell",
+            name="Bakterielle Schutzhülle",
+            category=UpgradeCategory.ABILITIES,
+            cost=12,
+            description="Bakterien-Spezial: Robuste Kapselwand verleiht natürlichen Schutz in allen Klimazonen.",
+            cold_res=0.25,
+            heat_res=0.25,
+            grid_pos=(3, 1),
+            requires=[],
+            is_pathogen_exclusive="bacteria",
+        ),
+        Upgrade(
+            id="spec_virus_instability",
+            name="Virale Instabilität",
+            category=UpgradeCategory.ABILITIES,
+            cost=12,
+            description="Virus-Spezial: Erhöht die Mutationshäufigkeit signifikant. Mutiert automatisch kostenlose Symptome.",
+            infectivity=1.0,
+            grid_pos=(3, 1),
+            requires=[],
+            is_pathogen_exclusive="virus",
+        ),
+        Upgrade(
+            id="spec_fungus_spore_1",
+            name="Sporenausbruch I",
+            category=UpgradeCategory.ABILITIES,
+            cost=10,
+            description="Pilz-Spezial: Schleudert Sporen hoch in die Atmosphäre und infiziert sofort ein zufälliges neues Land.",
+            grid_pos=(3, 1),
+            requires=[],
+            is_pathogen_exclusive="fungus",
+        ),
+        Upgrade(
+            id="spec_fungus_spore_2",
+            name="Sporenausbruch II",
+            category=UpgradeCategory.ABILITIES,
+            cost=16,
+            description="Pilz-Spezial: Weitere gigantische Sporenwolke infiziert 2 weitere bisher unberührte Länder.",
+            grid_pos=(3, 2),
+            requires=["spec_fungus_spore_1"],
+            is_pathogen_exclusive="fungus",
+        ),
+    ]
+
+    return {u.id: u for u in upgrades}
