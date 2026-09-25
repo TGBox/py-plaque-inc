@@ -6,9 +6,15 @@ from py_plaque_inc.model.transport import REGIONAL_ROUTES
 
 
 def test_countries_polygons_valid():
-    """Prüft, dass alle 49 Territorien existieren und gültige Polygone haben."""
+    """Prüft, dass alle 51 Territorien existieren und gültige Polygone haben."""
     countries = create_world_countries()
-    assert len(countries) == 49
+    assert len(countries) == 51
+
+    # Spezifische Anforderung: Deutschland darf NICHT mit Italien verbunden sein!
+    assert "ita" not in countries["deu"].neighbors, "Deutschland darf nicht direkt an Italien grenzen!"
+    assert "deu" not in countries["ita"].neighbors, "Italien darf nicht direkt an Deutschland grenzen!"
+    assert "ceu" in countries["deu"].neighbors, "Deutschland muss an Zentraleuropa grenzen!"
+    assert "ceu" in countries["ita"].neighbors, "Italien muss an Zentraleuropa grenzen!"
 
     total_pop = sum(c.population for c in countries.values())
     assert 7_000_000_000 <= total_pop <= 8_500_000_000, f"Weltbevölkerung unplausibel: {total_pop}"

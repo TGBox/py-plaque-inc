@@ -1,0 +1,11 @@
+{
+  "unlocked_pathogens": [
+    "bacteria",
+    "virus",
+    "fungus"
+  ],
+  "all_unlocked_cheat": true,
+  "wins": {
+    "bacteria": 13
+  }
+}

@@ -74,7 +74,19 @@ class MapRenderer:
         # Kleinere Länder werden zuerst getestet und gewinnen bei Überlappung.
         self._hit_order_cache: Optional[List[str]] = None
         self._hit_order_key: int = -1
-        self._hit_order_key: int = -1
+
+        # Schriftarten für gestochen scharfe deutsche Länderbeschriftungen
+        self._font_map: Optional[pygame.font.Font] = None
+        self._font_large: Optional[pygame.font.Font] = None
+        self._font_badge: Optional[pygame.font.Font] = None
+
+    def _get_fonts(self) -> Tuple[pygame.font.Font, pygame.font.Font, pygame.font.Font]:
+        """Lazy-loading für Vektorschriftarten."""
+        if self._font_map is None:
+            self._font_map = pygame.font.SysFont("Arial", 10, bold=True)
+            self._font_large = pygame.font.SysFont("Arial", 11, bold=True)
+            self._font_badge = pygame.font.SysFont("Arial", 12, bold=True)
+        return self._font_map, self._font_large, self._font_badge
 
     def _build_hit_order(self, countries: Dict[str, Country]) -> List[str]:
         """Sortiert Länder-IDs aufsteigend nach Polygongesamtfläche (Shoelace).
@@ -177,33 +189,90 @@ class MapRenderer:
                 is_selected = (c_id == self.selected_country_id)
                 self._draw_country_legacy(surface, country, is_hovered, is_selected)
 
-        # 3. Hauptstädte / Zentroid-Punkte
+        # 3. Hauptstädte & Gestochen scharfe deutsche Länderbeschriftungen
+        font_map, font_large, font_badge = self._get_fonts()
         for c_id, country in countries.items():
             cx, cy = country.capital_pos
             inf_ratio = country.infection_ratio
             dead_ratio = country.dead_ratio
-            cap_color = (180, 200, 220)
+
+            # Zentroid / Hauptstadt-Indikator
+            cap_color = (180, 205, 230)
             if inf_ratio > 0:
-                cap_color = (255, 100, 100)
+                cap_color = (255, 90, 90)
             if dead_ratio > 0.5:
-                cap_color = (90, 80, 85)
+                cap_color = (100, 85, 90)
             pygame.draw.circle(surface, cap_color, (cx, cy), 2)
+
+            # Deutsche Länderbeschriftung direkt auf der Karte (dezent mit Drop-Shadow)
+            if c_id != self.hovered_country_id:
+                f = font_large if country.population > 120_000_000 else font_map
+                # Text-Schatten für perfekte Lesbarkeit über allen Hintergründen & Infektionsfiltern
+                s_surf = f.render(country.name, True, (6, 10, 16))
+                t_surf = f.render(country.name, True, (165, 190, 215))
+                lx = cx - t_surf.get_width() // 2
+                ly = cy - 14
+                surface.blit(s_surf, (lx + 1, ly + 1))
+                surface.blit(t_surf, (lx, ly))
 
         # 4. Flug- und Schiffsrouten
         self._draw_transports(surface, transport_mgr)
 
-        # 5. Länder-Namen dezent einblenden (bei Hover oder Infektion)
+        # 5. Gehoverter Länder-Name: Modernes taktisches Floating-Badge
         if self.hovered_country_id and self.hovered_country_id in countries:
             h_country = countries[self.hovered_country_id]
             cx, cy = h_country.capital_pos
-            # Tooltip-Badge
-            name_text = f"{h_country.name} ({h_country.infection_ratio * 100:.1f}%)"
-            txt_surf = font.render(name_text, True, (255, 255, 255))
-            badge_rect = txt_surf.get_rect(center=(cx, cy - 14))
-            bg_rect = badge_rect.inflate(12, 6)
-            pygame.draw.rect(surface, (15, 20, 30, 220), bg_rect, border_radius=4)
-            pygame.draw.rect(surface, (80, 110, 140), bg_rect, width=1, border_radius=4)
-            surface.blit(txt_surf, badge_rect)
+            self._draw_hover_badge(surface, h_country, cx, cy, font_badge)
+
+    def _draw_hover_badge(
+        self,
+        surface: pygame.Surface,
+        country: Country,
+        cx: int,
+        cy: int,
+        font: pygame.font.Font,
+    ) -> None:
+        """Zeichnet ein modernes taktisches Floating-Badge mit Infektionsstatus und Einwohnerzahl."""
+        pop_str = (
+            f"{country.population / 1_000_000:.1f}M"
+            if country.population >= 1_000_000
+            else f"{country.population / 1_000:.0f}K"
+        )
+        inf_pct = country.infection_ratio * 100
+        status_str = f"Infiziert: {inf_pct:.1f}%"
+        badge_text = f"{country.name.upper()} ({pop_str})  •  {status_str}"
+
+        txt_surf = font.render(badge_text, True, (245, 250, 255))
+        badge_rect = txt_surf.get_rect(center=(cx, cy - 24))
+
+        # Klemmen an Bildschirmgrenzen
+        if badge_rect.left < self.rect.left + 12:
+            badge_rect.left = self.rect.left + 12
+        if badge_rect.right > self.rect.right - 12:
+            badge_rect.right = self.rect.right - 12
+        if badge_rect.top < self.rect.top + 10:
+            badge_rect.top = cy + 14
+
+        pad_rect = badge_rect.inflate(18, 10)
+        # Weicher Schatten für optimale Lesbarkeit über allen Kartendetails
+        shadow_rect = pad_rect.move(2, 3)
+        pygame.draw.rect(surface, (6, 10, 16), shadow_rect, border_radius=6)
+
+        badge_bg = pygame.Surface((pad_rect.width, pad_rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(badge_bg, (12, 18, 28, 245), badge_bg.get_rect(), border_radius=6)
+        
+        # Border-Farbe je nach Infektionsstufe
+        border_col = (80, 160, 245)
+        if country.dead_ratio > 0.5:
+            border_col = (140, 110, 120)
+        elif inf_pct > 25:
+            border_col = (255, 70, 70)
+        elif inf_pct > 0:
+            border_col = (255, 170, 40)
+            
+        pygame.draw.rect(badge_bg, border_col, badge_bg.get_rect(), width=1, border_radius=6)
+        surface.blit(badge_bg, pad_rect.topleft)
+        surface.blit(txt_surf, badge_rect)
 
     def _draw_grid_lines(self, surface: pygame.Surface) -> None:
         """Zeichnet ein elegantes Längen- und Breitengrad-Netz."""
