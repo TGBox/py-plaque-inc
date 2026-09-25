@@ -80,11 +80,22 @@ class HUDView:
             border_color=(190, 80, 220),
         )
 
+        # Nachrichten-Kasten (unten links, klickbar für Volltext)
+        self.news_rect = pygame.Rect(20, SCREEN_HEIGHT - 56, 450, 48)
+        self.is_news_hovered: bool = False
+
     def handle_event(self, event: pygame.event.Event, world: World) -> Optional[str]:
         """
         Verarbeitet HUD-Interaktionen.
-        Gibt Aktions-Strings zurück: 'evolution', 'country', 'spore', None.
+        Gibt Aktions-Strings zurück: 'evolution', 'country', 'news', 'spore', None.
         """
+        # Hover über News-Box
+        if event.type == pygame.MOUSEMOTION:
+            self.is_news_hovered = self.news_rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.news_rect.collidepoint(event.pos):
+                return "news"
+
         # Geschwindigkeits-Klicks
         for idx, btn in enumerate(self.speed_buttons):
             if btn.handle_event(event):
@@ -152,8 +163,8 @@ class HUDView:
         bot_bar_rect = pygame.Rect(0, SCREEN_HEIGHT - 64, SCREEN_WIDTH, 64)
         UITheme.draw_panel(surface, bot_bar_rect, bg_color=(14, 18, 26), border_color=(28, 38, 52), border_radius=0)
 
-        # Nachrichten-Laufband (News Ticker)
-        news_rect = pygame.Rect(20, SCREEN_HEIGHT - 56, 450, 48)
+        # Nachrichten-Laufband (News Ticker - klickbar für Volltext)
+        news_rect = self.news_rect
         
         # Farbe nach Priorität
         prio = world.news_mgr.current_priority
@@ -174,13 +185,31 @@ class HUDView:
             n_border = (35, 45, 60)
             n_icon = "📰 NEWS:"
 
-        UITheme.draw_panel(surface, news_rect, bg_color=n_bg, border_color=n_border, border_radius=4)
+        # Hover-Effekt
+        border_width = 1
+        if self.is_news_hovered:
+            n_bg = tuple(min(255, c + 15) for c in n_bg)
+            n_border = (120, 180, 240)
+            border_width = 2
+
+        UITheme.draw_panel(surface, news_rect, bg_color=n_bg, border_color=n_border, border_radius=4, border_width=border_width)
         UITheme.draw_text(surface, n_icon, self.theme.font_tiny, color=n_border, pos=(news_rect.left + 8, news_rect.top + 6))
         
+        # Klick-Hinweis rechts oben
+        hint_col = (160, 215, 255) if self.is_news_hovered else (90, 115, 140)
+        UITheme.draw_text(
+            surface,
+            "Volltext 🔍",
+            self.theme.font_tiny,
+            color=hint_col,
+            pos=(news_rect.right - 8, news_rect.top + 6),
+            align="right",
+        )
+
         # Headline mit Abschnitten
         headline = world.news_mgr.current_headline
-        if len(headline) > 62:
-            headline = headline[:59] + "..."
+        if len(headline) > 58:
+            headline = headline[:55] + "..."
         UITheme.draw_text(surface, headline, self.theme.font_body, color=(240, 240, 240), pos=(news_rect.left + 8, news_rect.top + 22))
 
         # Globale Weltstatistik (Mitte)
@@ -203,7 +232,7 @@ class HUDView:
         self.btn_evolution.draw(surface)
 
         if selected_country_name:
-            self.btn_country.text = f"🌍 {selected_country_name[:9]}"
+            self.btn_country.text = f"🌍 {selected_country_name[:11].upper()}"
             self.btn_country.enabled = True
         else:
             self.btn_country.text = "🌍 LAND-INFO"

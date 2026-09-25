@@ -22,6 +22,8 @@ from py_plaque_inc.ui.theme import UITheme
 from py_plaque_inc.ui.hud import HUDView
 from py_plaque_inc.ui.bubbles import BubbleView
 from py_plaque_inc.ui.views.country_view import CountryDetailView
+from py_plaque_inc.ui.views.world_view import WorldDetailView
+from py_plaque_inc.ui.views.news_view import NewsDetailModal
 
 
 class GameView:
@@ -38,10 +40,22 @@ class GameView:
         self.bubble_view = BubbleView()
         self.hud = HUDView(theme)
         self.country_detail = CountryDetailView(theme)
+        self.world_detail = WorldDetailView(theme)
+        self.news_modal = NewsDetailModal(theme)
 
         # Zustand
         self.is_showing_country_detail: bool = False
+        self.is_showing_world_detail: bool = False
+        self.is_showing_news_modal: bool = False
         self.selected_country_id: Optional[str] = None
+
+    def _get_selected_name(self, world: World) -> Optional[str]:
+        """Gibt den Anzeigenamen der aktuellen Auswahl (Land oder Erde) zurück."""
+        if self.selected_country_id == "world":
+            return "Erde"
+        elif self.selected_country_id and self.selected_country_id in world.countries:
+            return world.countries[self.selected_country_id].name
+        return None
 
     def handle_event(self, event: pygame.event.Event, world: World) -> Optional[str]:
         """
@@ -52,21 +66,44 @@ class GameView:
         if world.outcome != GameOutcome.ONGOING:
             return "game_over"
 
+        # Wenn News-Modal offen ist
+        if self.is_showing_news_modal:
+            if self.news_modal.handle_event(event):
+                self.is_showing_news_modal = False
+            return None
+
+        # Wenn World-Detail offen ist
+        if self.is_showing_world_detail:
+            if self.world_detail.handle_event(event):
+                self.is_showing_world_detail = False
+            return None
+
         # Wenn Country-Detail offen ist
-        if self.is_showing_country_detail and self.selected_country_id:
+        if self.is_showing_country_detail and self.selected_country_id and self.selected_country_id in world.countries:
             country = world.countries.get(self.selected_country_id)
             if country and self.country_detail.handle_event(event):
                 self.is_showing_country_detail = False
             return None
 
         # HUD Events
-        country_name = world.countries[self.selected_country_id].name if self.selected_country_id else None
         hud_action = self.hud.handle_event(event, world)
         
         if hud_action == "evolution":
             return "evolution"
         elif hud_action == "country" and self.selected_country_id:
-            self.is_showing_country_detail = True
+            if self.selected_country_id == "world":
+                self.is_showing_world_detail = True
+                self.is_showing_country_detail = False
+                self.is_showing_news_modal = False
+            else:
+                self.is_showing_country_detail = True
+                self.is_showing_world_detail = False
+                self.is_showing_news_modal = False
+            return None
+        elif hud_action == "news":
+            self.is_showing_news_modal = True
+            self.is_showing_world_detail = False
+            self.is_showing_country_detail = False
             return None
         elif hud_action == "spore":
             target = world.trigger_spore_burst()
@@ -108,12 +145,33 @@ class GameView:
                     self.selected_country_id = clicked_country.id
                     self.map_renderer.selected_country_id = clicked_country.id
                 else:
-                    # Land selektieren und ggf. per Doppelklick / Klick öffnen
+                    # Land selektieren und ggf. per Doppelklick / erneutem Klick öffnen
                     if self.selected_country_id == clicked_country.id:
                         self.is_showing_country_detail = True
+                        self.is_showing_world_detail = False
+                        self.is_showing_news_modal = False
                     else:
                         self.selected_country_id = clicked_country.id
                         self.map_renderer.selected_country_id = clicked_country.id
+                return None
+
+            # 3. Wurde ins Meer / Ozean geklickt? (Innerhalb des Kartenbereichs, aber kein Land)
+            if self.map_renderer.rect.collidepoint(event.pos):
+                if not world.has_started:
+                    self.particles.emit_bubble_pop(event.pos[0], event.pos[1], (100, 180, 255), "Wähle ein Land!")
+                else:
+                    if self.selected_country_id == "world":
+                        # Bereits Erde selektiert -> globale Welt-Detailansicht öffnen
+                        self.is_showing_world_detail = True
+                        self.is_showing_country_detail = False
+                        self.is_showing_news_modal = False
+                    else:
+                        # Komplette Erde als Auswahl selektieren
+                        self.selected_country_id = "world"
+                        self.map_renderer.selected_country_id = "world"
+                        self.particles.emit_country_pulse(event.pos[0], event.pos[1], (50, 140, 220))
+                        self.particles.emit_bubble_pop(event.pos[0], event.pos[1], (80, 190, 255), "Erde gewählt")
+                return None
 
         return None
 
@@ -155,11 +213,17 @@ class GameView:
             )
 
         # 4. HUD (Kopf- & Fußzeile)
-        country_name = world.countries[self.selected_country_id].name if self.selected_country_id else None
+        country_name = self._get_selected_name(world)
         self.hud.draw(surface, world, country_name)
 
         # 5. Detail-Popup falls aktiv
-        if self.is_showing_country_detail and self.selected_country_id:
+        if self.is_showing_world_detail:
+            self.world_detail.draw(surface, world)
+        elif self.is_showing_country_detail and self.selected_country_id:
             c = world.countries.get(self.selected_country_id)
             if c:
                 self.country_detail.draw(surface, c)
+
+        # 6. Nachrichten-Modal falls aktiv
+        if self.is_showing_news_modal:
+            self.news_modal.draw(surface, world)

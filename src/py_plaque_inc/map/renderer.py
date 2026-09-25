@@ -94,6 +94,16 @@ class MapRenderer:
         pygame.draw.rect(surface, COLOR_OCEAN_DEEP, self.rect)
         self._draw_grid_lines(surface)
 
+        # Falls die gesamte Welt ausgewählt ist: Ozean-Rahmen & Badge
+        if self.selected_country_id == "world":
+            pygame.draw.rect(surface, (40, 140, 220), self.rect, width=2)
+            badge_surf = font.render("🌐 AUSWAHL: PLANET ERDE (GESAMTE WELT)", True, (200, 230, 255))
+            badge_rect = badge_surf.get_rect(topleft=(self.rect.left + 16, self.rect.top + 12))
+            bg_rect = badge_rect.inflate(14, 8)
+            pygame.draw.rect(surface, (14, 22, 34, 230), bg_rect, border_radius=4)
+            pygame.draw.rect(surface, (40, 140, 220), bg_rect, width=1, border_radius=4)
+            surface.blit(badge_surf, badge_rect)
+
         # 2. Länder-Polygone mit Infektionsfarbe
         for c_id, country in countries.items():
             is_hovered = (c_id == self.hovered_country_id)

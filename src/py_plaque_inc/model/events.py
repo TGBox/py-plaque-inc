@@ -38,9 +38,11 @@ class NewsManager:
     """Verwaltet und generiert Schlagzeilen für den oberen/unteren Laufbalken."""
 
     def __init__(self):
-        self.news_history: List[NewsItem] = []
         self.current_headline: str = "Willkommen bei Py-Plaque-Inc. Wähle ein Startland, um die Seuche freizusetzen."
         self.current_priority: NewsPriority = NewsPriority.FLAVOR
+        self.news_history: List[NewsItem] = [
+            NewsItem(text=self.current_headline, priority=self.current_priority, day=0)
+        ]
         
         # Flags um doppelte Meilensteine zu verhindern
         self._milestone_first_infected = False
