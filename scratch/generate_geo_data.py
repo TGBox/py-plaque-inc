@@ -152,12 +152,19 @@ def extract_territory_polygons(
         pts = comp.outline(every=2)
         if len(pts) >= 6:
             simple = rdp(pts, eps)
+            # Korrekte Koordinatenumrechnung:
+            # Bildinhalt liegt bei x=80..1445, y=100..869 (im 1531x980 Bild).
+            # Spielkartenbereich: X=20..1260, Y=64..644 (1240x580 Pixel).
+            _IOFF_X, _IOFF_Y = 80, 100
+            _ISCALE_W, _ISCALE_H = 1365, 769   # 1445-80, 869-100
+            _MAP_X, _MAP_Y = 20, 64
+            _MAP_W, _MAP_H = 1240, 580
             game_pts: List[Tuple[int, int]] = []
             for x_img, y_img in simple:
-                gx = int(round(30 + (x_img - 70) * (1210 / 1376)))
-                gy = int(round(75 + (y_img - 100) * (540 / 772)))
-                gx = max(25, min(1255, gx))
-                gy = max(68, min(635, gy))
+                gx = int(round(_MAP_X + (x_img - _IOFF_X) * (_MAP_W / _ISCALE_W)))
+                gy = int(round(_MAP_Y + (y_img - _IOFF_Y) * (_MAP_H / _ISCALE_H)))
+                gx = max(20, min(1260, gx))
+                gy = max(64, min(644, gy))
                 game_pts.append((gx, gy))
 
             cleaned: List[Tuple[int, int]] = []
@@ -303,8 +310,9 @@ TERRITORIES_DATA = [
         "id": "esp", "name": "Spanien", "population": 58_000_000,
         "climate": "Climate.HOT", "wealth": "Wealth.RICH",
         "has_airport": True, "has_seaport": True,
-        "seeds": [(705, 420), (675, 420)],
-        "bounds": pygame.Rect(660, 395, 75, 60),
+        # Seeds und Bounds kalibriert: Spanien liegt in Bild-Y 350-415 (Mittelmeer-Grenze).
+        "seeds": [(700, 367), (715, 375), (695, 380), (672, 365)],
+        "bounds": pygame.Rect(645, 348, 90, 68),
         "neighbors": ["fra", "nab"],
     },
     {
@@ -319,8 +327,9 @@ TERRITORIES_DATA = [
         "id": "ita", "name": "Italien", "population": 59_000_000,
         "climate": "Climate.HOT", "wealth": "Wealth.RICH",
         "has_airport": True, "has_seaport": True,
-        "seeds": [(765, 405), (775, 440), (745, 425)],
-        "bounds": pygame.Rect(735, 385, 55, 75),
+        # Stiefel der Apenninenhalbinsel: y=385-460, erste beiden Seeds lagen auf cream.
+        "seeds": [(764, 406), (762, 420), (757, 435), (773, 445)],
+        "bounds": pygame.Rect(735, 383, 55, 80),
         "neighbors": ["fra", "deu", "bal"],
     },
     {
@@ -432,16 +441,19 @@ TERRITORIES_DATA = [
         "id": "nab", "name": "Nordafrika", "population": 90_000_000,
         "climate": "Climate.ARID", "wealth": "Wealth.MEDIUM",
         "has_airport": True, "has_seaport": True,
-        "seeds": [(675, 440), (710, 460), (755, 425)],
-        "bounds": pygame.Rect(650, 410, 125, 75),
+        # Nordafrika (Algerien/Marokko/Libyen) liegt in Bild-Y 420-510,
+        # klar unterhalb des Mittelmeers (Cream-Lücke bei Y=385-420).
+        "seeds": [(676, 435), (703, 437), (740, 432), (723, 466)],
+        "bounds": pygame.Rect(635, 420, 150, 90),
         "neighbors": ["esp", "egy", "waf"],
     },
     {
         "id": "egy", "name": "Ägypten", "population": 118_000_000,
         "climate": "Climate.ARID", "wealth": "Wealth.MEDIUM",
         "has_airport": True, "has_seaport": True,
-        "seeds": [(775, 460), (825, 460)],
-        "bounds": pygame.Rect(745, 425, 105, 70),
+        # Ägypten: Nilder Deltabereich, klar südlich des Mittelmeers.
+        "seeds": [(779, 477), (836, 480)],
+        "bounds": pygame.Rect(745, 450, 110, 70),
         "neighbors": ["nab", "sud", "mde", "sau"],
     },
     {

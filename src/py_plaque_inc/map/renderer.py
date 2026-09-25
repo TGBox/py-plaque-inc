@@ -1,7 +1,8 @@
 """Weltkarten-Renderer mit Polygon-Darstellung, Infektions-Shading und Routen."""
 
-from typing import Dict, List, Optional, Tuple
 import math
+import os
+from typing import Dict, List, Optional, Tuple
 import pygame
 
 from py_plaque_inc.config import (
@@ -56,14 +57,61 @@ class MapRenderer:
         self.selected_country_id: Optional[str] = None
         self.pulse_timer: float = 0.0
 
+        # Weltkarten-Hintergrundbild laden (falls vorhanden)
+        self.map_surface: Optional[pygame.Surface] = None
+        self._overlay_surface: Optional[pygame.Surface] = None
+        try:
+            asset_path = os.path.join(os.path.dirname(__file__), "..", "assets", "world_map_dark.png")
+            if os.path.exists(asset_path):
+                raw = pygame.image.load(asset_path)
+                self.map_surface = pygame.transform.smoothscale(raw, (self.rect.width, self.rect.height))
+                self._overlay_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        except Exception:
+            self.map_surface = None
+            self._overlay_surface = None
+
+        # Cache für die nach Fläche sortierte Treffreihenfolge.
+        # Kleinere Länder werden zuerst getestet und gewinnen bei Überlappung.
+        self._hit_order_cache: Optional[List[str]] = None
+        self._hit_order_key: int = -1
+        self._hit_order_key: int = -1
+
+    def _build_hit_order(self, countries: Dict[str, Country]) -> List[str]:
+        """Sortiert Länder-IDs aufsteigend nach Polygongesamtfläche (Shoelace).
+        Kleinere / spezifischere Regionen werden zuerst geprüft und gewinnen
+        bei Überschneidungen mit ausgebluteten Groß-Polygonen (z. B. Russland).
+        """
+        def total_area(c: Country) -> float:
+            area = 0.0
+            for poly in c.polygons:
+                n = len(poly)
+                a = 0.0
+                for i in range(n):
+                    j = (i + 1) % n
+                    a += poly[i][0] * poly[j][1]
+                    a -= poly[j][0] * poly[i][1]
+                area += abs(a) * 0.5
+            return area
+
+        return sorted(countries.keys(), key=lambda cid: total_area(countries[cid]))
+
     def handle_mouse_motion(self, pos: Tuple[int, int], countries: Dict[str, Country]) -> Optional[str]:
-        """Prüft, über welchem Land sich der Mauszeiger befindet."""
+        """Prüft, über welchem Land sich der Mauszeiger befindet.
+        Kleinere Länder haben Vorrang bei Überschneidungen mit größeren Polygonen.
+        """
         mx, my = pos
         if not self.rect.collidepoint(mx, my):
             self.hovered_country_id = None
             return None
 
-        for c_id, country in countries.items():
+        # Sortierte Treffreihenfolge einmalig berechnen und cachen.
+        dict_key = id(countries)
+        if self._hit_order_cache is None or self._hit_order_key != dict_key:
+            self._hit_order_cache = self._build_hit_order(countries)
+            self._hit_order_key = dict_key
+
+        for c_id in self._hit_order_cache:
+            country = countries[c_id]
             for poly in country.polygons:
                 if point_in_polygon(mx, my, poly):
                     self.hovered_country_id = c_id
@@ -90,9 +138,19 @@ class MapRenderer:
         font: pygame.font.Font,
     ) -> None:
         """Rendert die gesamte Weltkarte inklusive aller Schichten."""
-        # 1. Ozean-Hintergrund mit dezentem Raster
-        pygame.draw.rect(surface, COLOR_OCEAN_DEEP, self.rect)
-        self._draw_grid_lines(surface)
+        # 1. Ozean- / Karten-Hintergrund
+        if self.map_surface:
+            surface.blit(self.map_surface, self.rect.topleft)
+            self._draw_grid_lines(surface)
+        else:
+            pygame.draw.rect(surface, COLOR_OCEAN_DEEP, self.rect)
+            self._draw_grid_lines(surface)
+            # Im Fallback-Modus ohne Kartenbild alle Länder als Basis zeichnen
+            for c_id, country in countries.items():
+                for poly in country.polygons:
+                    if len(poly) >= 3:
+                        pygame.draw.polygon(surface, COLOR_COUNTRY_LAND, poly)
+                        pygame.draw.polygon(surface, COLOR_COUNTRY_OUTLINE, poly, 1)
 
         # Falls die gesamte Welt ausgewählt ist: Ozean-Rahmen & Badge
         if self.selected_country_id == "world":
@@ -104,16 +162,37 @@ class MapRenderer:
             pygame.draw.rect(surface, (40, 140, 220), bg_rect, width=1, border_radius=4)
             surface.blit(badge_surf, badge_rect)
 
-        # 2. Länder-Polygone mit Infektionsfarbe
-        for c_id, country in countries.items():
-            is_hovered = (c_id == self.hovered_country_id)
-            is_selected = (c_id == self.selected_country_id)
-            self._draw_country(surface, country, is_hovered, is_selected)
+        # 2. Länder-Overlays (Infektion, Tod, Hover, Selektion)
+        if self._overlay_surface:
+            self._overlay_surface.fill((0, 0, 0, 0))
+            rx, ry = self.rect.left, self.rect.top
+            for c_id, country in countries.items():
+                is_hovered = (c_id == self.hovered_country_id)
+                is_selected = (c_id == self.selected_country_id)
+                self._draw_country_overlay(country, is_hovered, is_selected, rx, ry)
+            surface.blit(self._overlay_surface, self.rect.topleft)
+        else:
+            for c_id, country in countries.items():
+                is_hovered = (c_id == self.hovered_country_id)
+                is_selected = (c_id == self.selected_country_id)
+                self._draw_country_legacy(surface, country, is_hovered, is_selected)
 
-        # 3. Flug- und Schiffsrouten
+        # 3. Hauptstädte / Zentroid-Punkte
+        for c_id, country in countries.items():
+            cx, cy = country.capital_pos
+            inf_ratio = country.infection_ratio
+            dead_ratio = country.dead_ratio
+            cap_color = (180, 200, 220)
+            if inf_ratio > 0:
+                cap_color = (255, 100, 100)
+            if dead_ratio > 0.5:
+                cap_color = (90, 80, 85)
+            pygame.draw.circle(surface, cap_color, (cx, cy), 2)
+
+        # 4. Flug- und Schiffsrouten
         self._draw_transports(surface, transport_mgr)
 
-        # 4. Länder-Namen dezent einblenden (bei Hover oder Infektion)
+        # 5. Länder-Namen dezent einblenden (bei Hover oder Infektion)
         if self.hovered_country_id and self.hovered_country_id in countries:
             h_country = countries[self.hovered_country_id]
             cx, cy = h_country.capital_pos
@@ -136,34 +215,75 @@ class MapRenderer:
         for x in range(self.rect.left + 80, self.rect.right, 100):
             pygame.draw.line(surface, grid_color, (x, self.rect.top), (x, self.rect.bottom), 1)
 
-    def _draw_country(
+    def _draw_country_overlay(
+        self,
+        country: Country,
+        is_hovered: bool,
+        is_selected: bool,
+        offset_x: int,
+        offset_y: int,
+    ) -> None:
+        """Rendert transparente Infektions-, Todes-, Hover- und Selektionsschichten auf dem Overlay."""
+        inf_ratio = country.infection_ratio
+        dead_ratio = country.dead_ratio
+        has_pulse = country.infected_pulse > 0
+
+        # Nichts zu zeichnen wenn kein Status aktiv
+        if not (inf_ratio > 0 or dead_ratio > 0 or is_hovered or is_selected or has_pulse):
+            return
+
+        for poly in country.polygons:
+            if len(poly) < 3:
+                continue
+            # Koordinaten relativ zum Overlay-Surface (rect.topleft)
+            rel_poly = [(px - offset_x, py - offset_y) for px, py in poly]
+
+            # 1. Infektions-Rot-Tönung
+            if inf_ratio > 0:
+                alpha_inf = int(170 * min(1.0, inf_ratio * 1.25))
+                pygame.draw.polygon(self._overlay_surface, (225, 28, 28, alpha_inf), rel_poly)
+
+            # 2. Toter Asche-Filter
+            if dead_ratio > 0:
+                alpha_dead = int(210 * min(1.0, dead_ratio * 1.2))
+                pygame.draw.polygon(self._overlay_surface, (15, 18, 24, alpha_dead), rel_poly)
+
+            # 3. Hover-Hervorhebung
+            if is_hovered:
+                pygame.draw.polygon(self._overlay_surface, (100, 180, 255, 65), rel_poly)
+                pygame.draw.polygon(self._overlay_surface, (160, 215, 255, 240), rel_poly, 2)
+
+            # 4. Selektions-Rahmen
+            if is_selected:
+                pygame.draw.polygon(self._overlay_surface, (0, 220, 255, 80), rel_poly)
+                pygame.draw.polygon(self._overlay_surface, (0, 240, 255, 255), rel_poly, 2)
+
+            # 5. Pulsieren bei Neuinfektion
+            if has_pulse and not is_selected:
+                pulse_alpha = int((math.sin(self.pulse_timer * 4.0) * 0.5 + 0.5) * 220)
+                pygame.draw.polygon(self._overlay_surface, (255, 60, 60, pulse_alpha), rel_poly, 2)
+
+    def _draw_country_legacy(
         self,
         surface: pygame.Surface,
         country: Country,
         is_hovered: bool,
         is_selected: bool,
     ) -> None:
-        """Zeichnet ein einzelnes Land mit passender Farbmischung."""
-        # Basisfarbe berechnen
+        """Fallback-Zeichnung ohne Bildressource."""
         inf_ratio = country.infection_ratio
         dead_ratio = country.dead_ratio
 
         base_color = COLOR_COUNTRY_LAND
         if inf_ratio > 0:
-            # Übergang zu Rot
             base_color = blend_color(COLOR_COUNTRY_LAND, COLOR_INFECTED_MIN, min(1.0, inf_ratio * 1.3))
-
         if dead_ratio > 0:
-            # Übergang zu Aschgrau-Schwarz
             base_color = blend_color(base_color, COLOR_DEAD, min(1.0, dead_ratio * 1.2))
-
         if is_hovered:
             base_color = blend_color(base_color, COLOR_COUNTRY_HOVER, 0.45)
 
-        # Rahmenfarbe
         outline_color = COLOR_COUNTRY_OUTLINE
         outline_width = 1
-
         if is_selected:
             outline_color = COLOR_COUNTRY_SELECTED
             outline_width = 2
@@ -171,12 +291,10 @@ class MapRenderer:
             outline_color = (160, 190, 220)
             outline_width = 2
         elif country.infected_pulse > 0:
-            # Rotes Pulsieren bei Neuinfektion
             pulse_alpha = math.sin(self.pulse_timer * 4.0) * 0.5 + 0.5
             outline_color = blend_color(COLOR_COUNTRY_OUTLINE, (255, 60, 60), pulse_alpha)
             outline_width = 2
 
-        # Polygone zeichnen
         for poly in country.polygons:
             if len(poly) >= 3:
                 pygame.draw.polygon(surface, base_color, poly)
