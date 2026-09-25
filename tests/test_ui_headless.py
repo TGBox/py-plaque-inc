@@ -203,3 +203,175 @@ def test_news_text_wrapping():
     reconstructed = " ".join(lines_long)
     assert reconstructed == long_text
 
+
+def test_quit_buttons_and_pause_menu():
+    """Prüft die Beenden-Buttons im Hauptmenü, Pausenmenü und Game-Over-Screen."""
+    # 1. Beenden im Hauptmenü
+    game = PlagueGame()
+    assert game.state == GameState.MENU
+    assert game.is_running is True
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.menu_view.btn_quit.rect.center, "button": 1}))
+    assert game.is_running is False
+    pygame.quit()
+
+    # 2. Pausenmenü im Spiel
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="Pause-Test", pathogen_type=PathogenType.BACTERIA, difficulty="Normal")
+    game.world.select_starting_country("deu")
+    assert game.state == GameState.PLAYING
+
+    # Klick auf Menü-Button im HUD
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.game_view.hud.btn_menu.rect.center, "button": 1}))
+    assert game.game_view.is_showing_pause_menu is True
+    game._draw()
+
+    # Weiterspielen
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.game_view.pause_menu.btn_resume.rect.center, "button": 1}))
+    assert game.game_view.is_showing_pause_menu is False
+
+    # ESC öffnet Pausenmenü erneut
+    game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE, "mod": 0}))
+    assert game.game_view.is_showing_pause_menu is True
+
+    # Klick auf 'Zum Hauptmenü'
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.game_view.pause_menu.btn_to_menu.rect.center, "button": 1}))
+    assert game.state == GameState.MENU
+
+    # Beenden im Pausenmenü
+    game.state = GameState.PLAYING
+    game.game_view.is_showing_pause_menu = True
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.game_view.pause_menu.btn_quit.rect.center, "button": 1}))
+    assert game.is_running is False
+    pygame.quit()
+
+    # 3. Beenden im Game-Over-Screen
+    game = PlagueGame()
+    game.state = GameState.GAME_OVER
+    game.world = game.world or PlagueGame().world
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.game_over_view.btn_quit.rect.center, "button": 1}))
+    assert game.is_running is False
+    pygame.quit()
+
+
+def test_pathogen_specific_upgrades_exclusivity():
+    """Prüft, dass erregerspezifische Fähigkeiten nicht überlappen und nur passende Upgrades sichtbar sind."""
+    # Pilz-Spiel starten
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="Pilz-Test", pathogen_type=PathogenType.FUNGUS, difficulty="Normal")
+    game.world.select_starting_country("deu")
+    game.state = GameState.EVOLUTION
+
+    # Fähigkeiten-Tab anwählen
+    from py_plaque_inc.model.upgrades import UpgradeCategory
+    game.evolution_view.current_category = UpgradeCategory.ABILITIES
+
+    # Für Pilz müssen spec_fungus_spore_1 und spec_fungus_spore_2 sichtbar sein
+    assert game.evolution_view._is_visible(game.world.pathogen.upgrades["spec_fungus_spore_1"], game.world.pathogen) is True
+    assert game.evolution_view._is_visible(game.world.pathogen.upgrades["spec_fungus_spore_2"], game.world.pathogen) is True
+
+    # Bakterien- und Viren-Spezialfähigkeiten dürfen NICHT sichtbar sein
+    assert game.evolution_view._is_visible(game.world.pathogen.upgrades["spec_bacteria_shell"], game.world.pathogen) is False
+    assert game.evolution_view._is_visible(game.world.pathogen.upgrades["spec_virus_instability"], game.world.pathogen) is False
+
+    # Klick auf Position (3, 1) muss genau spec_fungus_spore_1 auswählen (nicht Bakterie!)
+    spore1_pos = game.evolution_view._get_node_screen_pos((3, 1))
+    game.evolution_view.handle_event(
+        pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": spore1_pos, "button": 1}),
+        game.world.pathogen,
+    )
+    assert game.evolution_view.selected_upgrade_id == "spec_fungus_spore_1"
+
+    # Sporenausbruch I kann für 10 DNA freigeschaltet werden
+    game.world.pathogen.dna_points = 20
+    can_buy, _ = game.world.pathogen.can_unlock("spec_fungus_spore_1")
+    assert can_buy is True
+    game.evolution_view.handle_event(
+        pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.evolution_view.btn_unlock.rect.center, "button": 1}),
+        game.world.pathogen,
+    )
+    assert game.world.pathogen.upgrades["spec_fungus_spore_1"].unlocked is True
+
+    # Rendern des Evolutionsbaums (mit Vektor-Häkchen)
+    game._draw()
+
+    pygame.quit()
+
+
+def test_dna_badge_click_opens_evolution_view():
+    """Prüft, dass ein Klick auf das DNA-Badge im HUD oben direkt in das Evolutionsmenü führt."""
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="DNA-Click-Test", pathogen_type=PathogenType.BACTERIA, difficulty="Normal")
+    game.world.select_starting_country("deu")
+    assert game.state == GameState.PLAYING
+
+    hud = game.game_view.hud
+    assert hud.dna_rect.width > 0
+
+    # Maus über das DNA-Badge bewegen -> is_dna_hovered
+    game._handle_event(pygame.event.Event(pygame.MOUSEMOTION, {"pos": hud.dna_rect.center}))
+    assert hud.is_dna_hovered is True
+
+    # Klick auf das DNA-Badge -> Wechsel in den Zustand EVOLUTION
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": hud.dna_rect.center, "button": 1}))
+    assert game.state == GameState.EVOLUTION
+
+    # Rendern der Evolution View prüfen
+    game._draw()
+    pygame.quit()
+
+
+def test_menu_view_responsive_layout_widescreen_and_fullscreen():
+    """Prüft, dass sich das Hauptmenü-Layout bei Vollbild und Ultrawide dem verfügbaren Platz anpasst."""
+    game = PlagueGame()
+    assert game.state == GameState.MENU
+
+    # 1. Standard 1280x720 Fenster
+    game.menu_view.update_layout(1280, 720)
+    col1_w_720 = game.menu_view.panel_left_rect.width
+    assert col1_w_720 >= 500
+    assert game.menu_view.panel_right_rect.right <= 1280
+    assert game.menu_view.btn_start.rect.bottom <= 720
+    game._draw()
+
+    # 2. 1920x1080 (Vollbild 16:9)
+    game.set_resolution("1920x1080", fullscreen=True)
+    assert game.screen.get_size() == (1920, 1080)
+    assert game.menu_view.width == 1920
+    assert game.menu_view.height == 1080
+    col1_w_1080 = game.menu_view.panel_left_rect.width
+    assert col1_w_1080 > col1_w_720  # Spalten sind breiter und nutzen den Platz aus
+    assert game.menu_view.panel_right_rect.right <= 1920
+    assert game.menu_view.btn_start.rect.bottom <= 1080
+    game._draw()
+
+    # 3. 2560x1080 (Ultrawide 21:9)
+    game.set_resolution("2560x1080", fullscreen=False)
+    assert game.screen.get_size() == (2560, 1080)
+    assert game.menu_view.width == 2560
+    col1_w_ultrawide = game.menu_view.panel_left_rect.width
+    assert col1_w_ultrawide > col1_w_1080  # Noch mehr Platz für Pathogen-Attribute und Lore
+    assert game.menu_view.panel_right_rect.right <= 2560
+    game._draw()
+
+    # Klick auf "Virus"-Tab auf 2560x1080 testen
+    virus_btn = game.menu_view.type_buttons[1]
+    assert virus_btn.tab_id == "virus"
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": virus_btn.rect.center, "button": 1}))
+    assert game.menu_view.selected_type == PathogenType.VIRUS
+
+    # Klick auf "Schwer"-Tab auf 2560x1080 testen
+    hard_btn = game.menu_view.diff_buttons[2]
+    assert hard_btn.tab_id == "Schwer"
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": hard_btn.rect.center, "button": 1}))
+    assert game.menu_view.selected_diff == "Schwer"
+
+    # Klick auf "SEUCHE FREISETZEN" startet das Spiel
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": game.menu_view.btn_start.rect.center, "button": 1}))
+    assert game.state == GameState.PLAYING
+    assert game.world.pathogen.pathogen_type == PathogenType.VIRUS
+    assert game.world.difficulty_name == "Schwer"
+
+    pygame.quit()
+
+
+

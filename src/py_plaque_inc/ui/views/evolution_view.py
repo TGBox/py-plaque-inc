@@ -16,10 +16,23 @@ from py_plaque_inc.config import (
     COLOR_TEXT_PRIMARY,
     COLOR_TEXT_MUTED,
 )
-from py_plaque_inc.model.pathogen import Pathogen
+from py_plaque_inc.model.pathogen import Pathogen, PATHOGEN_INFO
 from py_plaque_inc.model.upgrades import Upgrade, UpgradeCategory
 from py_plaque_inc.ui.theme import UITheme
 from py_plaque_inc.ui.components import Button, TabButton, ProgressBar
+
+
+def format_node_label(name: str) -> str:
+    """Kürzt den Namen für den Tech-Tree, behält aber römische Ziffern wie I / II bei."""
+    if name.endswith(" II"):
+        base = name[:-3].strip()
+        return f"{base[:7]} II"
+    elif name.endswith(" I"):
+        base = name[:-2].strip()
+        return f"{base[:7]} I"
+    if len(name) > 11:
+        return name[:10] + "."
+    return name
 
 
 class EvolutionView:
@@ -40,7 +53,7 @@ class EvolutionView:
         # Zurück-Button (oben rechts)
         self.btn_back = Button(
             pygame.Rect(SCREEN_WIDTH - 210, 20, 180, 40),
-            "⬅ ZURÜCK ZUR KARTE",
+            "<- ZURÜCK ZUR KARTE",
             theme.font_body_bold,
             bg_color=(35, 45, 60),
             hover_color=(50, 65, 90),
@@ -60,6 +73,14 @@ class EvolutionView:
         self.tree_rect = pygame.Rect(40, 80, 860, 520)
         self.detail_rect = pygame.Rect(920, 80, 320, 520)
 
+    def _is_visible(self, upgrade: Upgrade, pathogen: Pathogen) -> bool:
+        """Prüft, ob ein Upgrade für den aktuellen Erregertyp sichtbar ist."""
+        if upgrade.is_pathogen_exclusive:
+            pathogen_id = PATHOGEN_INFO[pathogen.pathogen_type]["id"]
+            if upgrade.is_pathogen_exclusive != pathogen_id:
+                return False
+        return True
+
     def handle_event(self, event: pygame.event.Event, pathogen: Pathogen) -> bool:
         """
         Verarbeitet Benutzereingaben.
@@ -78,7 +99,7 @@ class EvolutionView:
                     t.is_active = (t.tab_id == clicked_tab)
                 # Ersten passenden Knoten auswählen
                 for u in pathogen.upgrades.values():
-                    if u.category == self.current_category:
+                    if u.category == self.current_category and self._is_visible(u, pathogen):
                         self.selected_upgrade_id = u.id
                         break
 
@@ -105,16 +126,16 @@ class EvolutionView:
         """Rechnet Grid-Koordinaten (0..6, 0..4) in Bildschirmkoordinaten um."""
         gx, gy = grid_pos
         start_x = self.tree_rect.left + 70
-        start_y = self.tree_rect.top + 70
+        start_y = self.tree_rect.top + 60
         spacing_x = 125
-        spacing_y = 100
+        spacing_y = 110
         return start_x + gx * spacing_x, start_y + gy * spacing_y
 
     def _get_node_at_pos(self, pos: Tuple[int, int], pathogen: Pathogen) -> Optional[str]:
         """Gibt die Upgrade-ID des angeklickten Knotens zurück."""
         mx, my = pos
         for u in pathogen.upgrades.values():
-            if u.category == self.current_category:
+            if u.category == self.current_category and self._is_visible(u, pathogen):
                 nx, ny = self._get_node_screen_pos(u.grid_pos)
                 if math.hypot(mx - nx, my - ny) <= 28:
                     return u.id
@@ -132,26 +153,26 @@ class EvolutionView:
         # DNA-Anzeige oben rechts
         dna_rect = pygame.Rect(SCREEN_WIDTH - 410, 20, 180, 40)
         UITheme.draw_panel(surface, dna_rect, bg_color=(35, 25, 12), border_color=COLOR_DNA, border_radius=6)
-        UITheme.draw_text(surface, f"🧬 {pathogen.dna_points} DNA", self.theme.font_header, color=COLOR_DNA, pos=dna_rect.center, align="center")
+        UITheme.draw_text(surface, f"DNA: {pathogen.dna_points}", self.theme.font_header, color=COLOR_DNA, pos=dna_rect.center, align="center")
 
         # 2. Tech-Tree Panel
         UITheme.draw_panel(surface, self.tree_rect, bg_color=(15, 20, 30), border_color=(30, 42, 60), border_radius=8)
 
         # Verbindungslinien zwischen Voraussetzungen zeichnen
         for u in pathogen.upgrades.values():
-            if u.category == self.current_category:
+            if u.category == self.current_category and self._is_visible(u, pathogen):
                 nx, ny = self._get_node_screen_pos(u.grid_pos)
                 for req_id in u.requires:
                     if req_id in pathogen.upgrades:
                         req_u = pathogen.upgrades[req_id]
-                        if req_u.category == self.current_category:
+                        if req_u.category == self.current_category and self._is_visible(req_u, pathogen):
                             rx, ry = self._get_node_screen_pos(req_u.grid_pos)
                             line_color = (60, 180, 90) if req_u.unlocked else (40, 55, 75)
                             pygame.draw.line(surface, line_color, (rx, ry), (nx, ny), 2)
 
         # Knoten zeichnen
         for u in pathogen.upgrades.values():
-            if u.category == self.current_category:
+            if u.category == self.current_category and self._is_visible(u, pathogen):
                 nx, ny = self._get_node_screen_pos(u.grid_pos)
                 is_selected = (u.id == self.selected_upgrade_id)
                 can_buy, _ = pathogen.can_unlock(u.id)
@@ -174,12 +195,17 @@ class EvolutionView:
                 pygame.draw.circle(surface, node_border, (nx, ny), 26, width=2)
 
                 # Name / Kosten im Knoten
-                cost_txt = f"{u.cost} DNA" if not u.unlocked else "✓"
-                txt_col = (255, 255, 255) if u.unlocked or can_buy else COLOR_TEXT_MUTED
-                UITheme.draw_text(surface, cost_txt, self.theme.font_tiny, color=txt_col, pos=(nx, ny - 6), align="center")
+                if u.unlocked:
+                    # Vektor-Häkchen zeichnen (keine Font-Glyph-Probleme)
+                    check_pts = [(nx - 7, ny), (nx - 2, ny + 5), (nx + 7, ny - 5)]
+                    pygame.draw.lines(surface, (255, 255, 255), False, check_pts, width=3)
+                else:
+                    cost_txt = f"{u.cost} DNA"
+                    txt_col = (255, 255, 255) if can_buy else COLOR_TEXT_MUTED
+                    UITheme.draw_text(surface, cost_txt, self.theme.font_tiny, color=txt_col, pos=(nx, ny - 6), align="center")
                 
                 # Kurzer Titel unter dem Knoten
-                short_name = u.name[:10]
+                short_name = format_node_label(u.name)
                 UITheme.draw_text(surface, short_name, self.theme.font_tiny, color=COLOR_TEXT_PRIMARY, pos=(nx, ny + 32), align="center")
 
         # 3. Detail-Sidebar (rechts)

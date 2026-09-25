@@ -58,13 +58,13 @@ class CountryDetailView:
         # Kopfzeile mit Landesname
         UITheme.draw_text(
             surface,
-            f"🌍 {country.name.upper()}",
+            f"{country.name.upper()}",
             self.theme.font_title,
             color=(255, 255, 255),
             pos=(self.panel_rect.left + 24, self.panel_rect.top + 20),
         )
 
-        sub_txt = f"Klima: {country.climate.value}  •  Wohlstand: {country.wealth.value}"
+        sub_txt = f"Klima: {country.climate.value}  |  Wohlstand: {country.wealth.value}"
         UITheme.draw_text(
             surface,
             sub_txt,

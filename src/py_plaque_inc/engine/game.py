@@ -84,7 +84,8 @@ class PlagueGame:
         self.screen = pygame.display.set_mode((w, h), flags)
         self._recalc_scaling()
 
-        # Menü-Buttons synchronisieren
+        # Menü-Layout an die neue Bildschirmgröße anpassen
+        self.menu_view.update_layout(w, h)
         self.menu_view.selected_res = res_str
         for b in self.menu_view.res_buttons:
             b.is_active = (b.tab_id == res_str)
@@ -98,9 +99,13 @@ class PlagueGame:
             sizes = pygame.display.get_desktop_sizes()
             target_res = "1920x1080"
             if sizes:
-                dw, _ = sizes[0]
-                if dw >= 2560:
+                dw, dh = sizes[0]
+                if dw >= 2560 and dh == 1080:
                     target_res = "2560x1080"
+                elif dw >= 2560:
+                    target_res = f"{dw}x{dh}"
+                elif dw >= 1920:
+                    target_res = "1920x1080"
             self.set_resolution(target_res, fullscreen=True)
 
     def start_new_game(
@@ -174,7 +179,17 @@ class PlagueGame:
                     self.world.set_speed(0)
                     return
 
-        # 2. Maus-Koordinaten auf virtuelle 1280x720 Canvas umrechnen
+        # 2. Im Hauptmenü: Direkte Verarbeitung mit nativen Bildschirmkoordinaten
+        if self.state == GameState.MENU:
+            config = self.menu_view.handle_event(event)
+            if config == "quit":
+                self.is_running = False
+            elif config:
+                p_name, p_type, diff, res_mode = config
+                self.start_new_game(p_name, p_type, diff, res_mode)
+            return
+
+        # 3. Maus-Koordinaten auf virtuelle 1280x720 Canvas umrechnen (für Spiel, Evolution, Game Over)
         if hasattr(event, "pos"):
             mx, my = event.pos
             if self.scale > 0:
@@ -184,17 +199,17 @@ class PlagueGame:
                 vy = max(0, min(SCREEN_HEIGHT - 1, vy))
                 event = pygame.event.Event(event.type, {**event.__dict__, "pos": (vx, vy)})
 
-        # 3. Weiterleitung an State-Views
-        if self.state == GameState.MENU:
-            config = self.menu_view.handle_event(event)
-            if config:
-                p_name, p_type, diff, res_mode = config
-                self.start_new_game(p_name, p_type, diff, res_mode)
-
-        elif self.state == GameState.PLAYING and self.world:
+        # 4. Weiterleitung an aktive Ansicht
+        if self.state == GameState.PLAYING and self.world:
             action = self.game_view.handle_event(event, self.world)
             if action == "evolution":
                 self.state = GameState.EVOLUTION
+            elif action == "menu":
+                self.state = GameState.MENU
+                w, h = self.screen.get_size()
+                self.menu_view.update_layout(w, h)
+            elif action == "quit":
+                self.is_running = False
             elif action == "game_over" or self.world.outcome != GameOutcome.ONGOING:
                 self.state = GameState.GAME_OVER
 
@@ -204,9 +219,13 @@ class PlagueGame:
                 self.state = GameState.PLAYING
 
         elif self.state == GameState.GAME_OVER:
-            wants_restart = self.game_over_view.handle_event(event)
-            if wants_restart:
+            action = self.game_over_view.handle_event(event)
+            if action == "quit":
+                self.is_running = False
+            elif action == "restart":
                 self.state = GameState.MENU
+                w, h = self.screen.get_size()
+                self.menu_view.update_layout(w, h)
 
     def _update(self, dt: float) -> None:
         """Aktualisiert Spielzustand und Views."""
@@ -217,18 +236,21 @@ class PlagueGame:
                 self.state = GameState.GAME_OVER
 
     def _draw(self) -> None:
-        """Rendert die aktive Ansicht in die virtuelle Canvas und skaliert auf den Bildschirm."""
-        # 1. In virtuelle Fläche zeichnen
+        """Rendert die aktive Ansicht."""
+        # 1. Hauptmenü rendert direkt auf die Bildschirmoberfläche für volle Widescreen-/Vollbild-Anpassung
         if self.state == GameState.MENU:
-            self.menu_view.draw(self.virtual_screen)
-        elif self.state == GameState.PLAYING and self.world:
+            self.menu_view.draw(self.screen)
+            return
+
+        # 2. In virtuelle 1280x720 Fläche zeichnen (Spiel, Evolution, Game Over)
+        if self.state == GameState.PLAYING and self.world:
             self.game_view.draw(self.virtual_screen, self.world)
         elif self.state == GameState.EVOLUTION and self.world:
             self.evolution_view.draw(self.virtual_screen, self.world.pathogen)
         elif self.state == GameState.GAME_OVER and self.world:
             self.game_over_view.draw(self.virtual_screen, self.world)
 
-        # 2. Skaliertes Blitting auf den physischen Bildschirm
+        # 3. Skaliertes Blitting auf den physischen Bildschirm
         w, h = self.screen.get_size()
         if self.scaled_w == w and self.scaled_h == h and self.offset_x == 0 and self.offset_y == 0:
             self.screen.blit(self.virtual_screen, (0, 0))

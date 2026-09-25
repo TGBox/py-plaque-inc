@@ -29,19 +29,32 @@ class GameOverView:
         self.theme = theme
 
         self.btn_restart = Button(
-            pygame.Rect(SCREEN_WIDTH // 2 - 140, SCREEN_HEIGHT - 70, 280, 46),
-            "NEUES SPIEL STARTEN",
+            pygame.Rect(SCREEN_WIDTH // 2 - 210, SCREEN_HEIGHT - 70, 200, 46),
+            "HAUPTMENÜ",
             theme.font_header,
             bg_color=(35, 55, 80),
             hover_color=(50, 75, 110),
             border_color=(0, 180, 255),
         )
 
+        self.btn_quit = Button(
+            pygame.Rect(SCREEN_WIDTH // 2 + 10, SCREEN_HEIGHT - 70, 200, 46),
+            "SPIEL BEENDEN",
+            theme.font_header,
+            bg_color=(45, 20, 25),
+            hover_color=(75, 30, 38),
+            border_color=(190, 55, 65),
+        )
+
         self.graph_rect = pygame.Rect(140, 220, 1000, 260)
 
-    def handle_event(self, event: pygame.event.Event) -> bool:
-        """Gibt True zurück, wenn ein neues Spiel gestartet werden soll."""
-        return self.btn_restart.handle_event(event)
+    def handle_event(self, event: pygame.event.Event) -> Optional[str]:
+        """Gibt 'restart', 'quit' oder None zurück."""
+        if self.btn_restart.handle_event(event):
+            return "restart"
+        if self.btn_quit.handle_event(event):
+            return "quit"
+        return None
 
     def draw(self, surface: pygame.Surface, world: World) -> None:
         """Rendert den gesamten Game-Over-Screen mit Zeitverlaufskurven."""
@@ -87,8 +100,9 @@ class GameOverView:
         # 3. Verlaufsgraph (Kurvendiagramm)
         self._draw_history_graph(surface, world.history, world.total_population)
 
-        # 4. Neustart-Button
+        # 4. Buttons
         self.btn_restart.draw(surface)
+        self.btn_quit.draw(surface)
 
     def _draw_history_graph(
         self,
@@ -107,10 +121,10 @@ class GameOverView:
         leg_x = self.graph_rect.right - 460
         leg_y = self.graph_rect.top + 12
         items = [
-            ("— Gesunde", COLOR_SUCCESS),
-            ("— Infizierte", COLOR_DANGER),
-            ("— Tote", (140, 150, 160)),
-            ("— Heilmittel %", COLOR_CURE),
+            ("- Gesunde", COLOR_SUCCESS),
+            ("- Infizierte", COLOR_DANGER),
+            ("- Tote", (140, 150, 160)),
+            ("- Heilmittel %", COLOR_CURE),
         ]
         for name, col in items:
             UITheme.draw_text(surface, name, self.theme.font_tiny, color=col, pos=(leg_x, leg_y))

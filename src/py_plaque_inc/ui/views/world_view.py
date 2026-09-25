@@ -67,13 +67,13 @@ class WorldDetailView:
         # 3. Kopfzeile mit Planet Erde
         UITheme.draw_text(
             surface,
-            "🌍 PLANET ERDE (GESAMTE WELT)",
+            "PLANET ERDE (GESAMTE WELT)",
             self.theme.font_title,
             color=(255, 255, 255),
             pos=(self.panel_rect.left + 24, self.panel_rect.top + 18),
         )
 
-        sub_txt = f"Erreger: {world.pathogen.name} ({world.pathogen.pathogen_type.value})  •  Schwierigkeit: {world.difficulty_name}  •  Tag {world.current_day}"
+        sub_txt = f"Erreger: {world.pathogen.name} ({world.pathogen.pathogen_type.value})  |  Schwierigkeit: {world.difficulty_name}  |  Tag {world.current_day}"
         UITheme.draw_text(
             surface,
             sub_txt,

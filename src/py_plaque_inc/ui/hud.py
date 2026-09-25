@@ -55,7 +55,7 @@ class HUDView:
         # Aktions-Buttons (unten rechts)
         self.btn_evolution = Button(
             pygame.Rect(SCREEN_WIDTH - 170, SCREEN_HEIGHT - 48, 150, 36),
-            "🧬 EVOLUTION",
+            "EVOLUTION",
             theme.font_header,
             bg_color=(35, 50, 72),
             hover_color=(50, 75, 110),
@@ -65,7 +65,7 @@ class HUDView:
 
         self.btn_country = Button(
             pygame.Rect(SCREEN_WIDTH - 330, SCREEN_HEIGHT - 48, 150, 36),
-            "🌍 LAND-INFO",
+            "LAND-INFO",
             theme.font_body_bold,
             bg_color=(25, 34, 48),
             hover_color=(38, 50, 70),
@@ -73,28 +73,49 @@ class HUDView:
 
         self.btn_spore = Button(
             pygame.Rect(SCREEN_WIDTH - 490, SCREEN_HEIGHT - 48, 150, 36),
-            "🍄 SPOREN",
+            "SPOREN",
             theme.font_body_bold,
             bg_color=(45, 30, 48),
             hover_color=(65, 45, 70),
             border_color=(190, 80, 220),
         )
 
+        # Menü-Button (oben rechts)
+        self.btn_menu = Button(
+            pygame.Rect(SCREEN_WIDTH - 54, 12, 42, 28),
+            "MENÜ",
+            theme.font_tiny,
+            bg_color=(35, 45, 60),
+            hover_color=(50, 65, 85),
+            border_color=COLOR_PANEL_BORDER,
+        )
+
         # Nachrichten-Kasten (unten links, klickbar für Volltext)
         self.news_rect = pygame.Rect(20, SCREEN_HEIGHT - 56, 450, 48)
         self.is_news_hovered: bool = False
 
+        # DNA-Punkte Badge (oben, klickbar für Evolution)
+        self.dna_rect = pygame.Rect(290, 12, 120, 30)
+        self.is_dna_hovered: bool = False
+
     def handle_event(self, event: pygame.event.Event, world: World) -> Optional[str]:
         """
         Verarbeitet HUD-Interaktionen.
-        Gibt Aktions-Strings zurück: 'evolution', 'country', 'news', 'spore', None.
+        Gibt Aktions-Strings zurück: 'evolution', 'country', 'news', 'spore', 'pause_menu', None.
         """
-        # Hover über News-Box
+        # Hover über News-Box und DNA-Badge
         if event.type == pygame.MOUSEMOTION:
             self.is_news_hovered = self.news_rect.collidepoint(event.pos)
+            self.is_dna_hovered = self.dna_rect.collidepoint(event.pos)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.dna_rect.collidepoint(event.pos):
+                return "evolution"
             if self.news_rect.collidepoint(event.pos):
                 return "news"
+
+        # Menü-Button
+        if self.btn_menu.handle_event(event):
+            return "pause_menu"
 
         # Geschwindigkeits-Klicks
         for idx, btn in enumerate(self.speed_buttons):
@@ -128,14 +149,29 @@ class HUDView:
 
         # Datum
         date_str = world.current_calendar_date.strftime("%d. %B %Y")
-        day_str = f"Tag {world.current_day}  •  {date_str}"
+        day_str = f"Tag {world.current_day}  |  {date_str}"
         UITheme.draw_text(surface, day_str, self.theme.font_small, color=COLOR_TEXT_MUTED, pos=(20, 32))
 
-        # DNA-Punkte (Hexagon/Pill Badge)
-        dna_rect = pygame.Rect(290, 12, 120, 30)
-        UITheme.draw_panel(surface, dna_rect, bg_color=(35, 26, 12), border_color=COLOR_DNA, border_radius=15)
-        dna_txt = f"🧬 {world.pathogen.dna_points} DNA"
-        UITheme.draw_text(surface, dna_txt, self.theme.font_body_bold, color=COLOR_DNA, pos=dna_rect.center, align="center")
+        # DNA-Punkte (Hexagon/Pill Badge - klickbar für Evolutionsmenü)
+        dna_bg = (55, 42, 18) if self.is_dna_hovered else (35, 26, 12)
+        dna_border = (255, 220, 80) if self.is_dna_hovered else COLOR_DNA
+        border_w = 2 if self.is_dna_hovered else 1
+        UITheme.draw_panel(
+            surface,
+            self.dna_rect,
+            bg_color=dna_bg,
+            border_color=dna_border,
+            border_radius=15,
+            border_width=border_w,
+        )
+        dna_txt = f"DNA: {world.pathogen.dna_points}"
+        UITheme.draw_text(surface, dna_txt, self.theme.font_body_bold, color=COLOR_DNA, pos=self.dna_rect.center, align="center")
+
+        # Kleiner Tooltip-Hinweis bei Hover über DNA-Badge
+        if self.is_dna_hovered:
+            tip_rect = pygame.Rect(self.dna_rect.centerx - 65, self.dna_rect.bottom + 5, 130, 20)
+            UITheme.draw_panel(surface, tip_rect, bg_color=(20, 26, 38), border_color=(70, 95, 130), border_radius=4)
+            UITheme.draw_text(surface, "Klick: Evolution", self.theme.font_tiny, color=(255, 255, 255), pos=tip_rect.center, align="center")
 
         # Heilmittelforschung
         cure_txt = f"Heilmittel: {world.cure_progress:.1f}%"
@@ -157,6 +193,9 @@ class HUDView:
                 btn.text_color = COLOR_TEXT_PRIMARY
             btn.draw(surface)
 
+        # Menü-Button oben rechts zeichnen
+        self.btn_menu.draw(surface)
+
         # ==========================================
         # 2. FUSSZEILE (Bottom Bar)
         # ==========================================
@@ -171,19 +210,19 @@ class HUDView:
         if prio == NewsPriority.ALERT:
             n_bg = (45, 18, 20)
             n_border = COLOR_DANGER
-            n_icon = "⚠️ ALARM:"
+            n_icon = "[ALARM]"
         elif prio == NewsPriority.MILESTONE:
             n_bg = (38, 32, 16)
             n_border = COLOR_DNA
-            n_icon = "⭐ MEILENSTEIN:"
+            n_icon = "[MEILENSTEIN]"
         elif prio == NewsPriority.INFO:
             n_bg = (18, 32, 45)
             n_border = (0, 150, 220)
-            n_icon = "ℹ️ INFO:"
+            n_icon = "[INFO]"
         else:
             n_bg = (18, 22, 30)
             n_border = (35, 45, 60)
-            n_icon = "📰 NEWS:"
+            n_icon = "[NEWS]"
 
         # Hover-Effekt
         border_width = 1
@@ -199,7 +238,7 @@ class HUDView:
         hint_col = (160, 215, 255) if self.is_news_hovered else (90, 115, 140)
         UITheme.draw_text(
             surface,
-            "Volltext 🔍",
+            "[Volltext]",
             self.theme.font_tiny,
             color=hint_col,
             pos=(news_rect.right - 8, news_rect.top + 6),
@@ -232,10 +271,10 @@ class HUDView:
         self.btn_evolution.draw(surface)
 
         if selected_country_name:
-            self.btn_country.text = f"🌍 {selected_country_name[:11].upper()}"
+            self.btn_country.text = f"{selected_country_name[:11].upper()}"
             self.btn_country.enabled = True
         else:
-            self.btn_country.text = "🌍 LAND-INFO"
+            self.btn_country.text = "LAND-INFO"
             self.btn_country.enabled = False
         self.btn_country.draw(surface)
 

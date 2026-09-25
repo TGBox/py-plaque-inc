@@ -68,8 +68,8 @@ class NewsDetailModal:
 
         self.btn_close_x = Button(
             pygame.Rect(self.panel_rect.right - 36, self.panel_rect.top + 14, 24, 24),
-            "✕",
-            theme.font_small,
+            "X",
+            theme.font_body_bold,
             bg_color=(25, 34, 48),
             hover_color=(60, 30, 35),
             border_radius=3,
@@ -78,14 +78,14 @@ class NewsDetailModal:
         # Scroll-Buttons für die Historie
         self.btn_scroll_up = Button(
             pygame.Rect(self.panel_rect.right - 32, self.panel_rect.top + 195, 20, 20),
-            "▲",
+            "^",
             theme.font_tiny,
             bg_color=(25, 35, 48),
             border_radius=2,
         )
         self.btn_scroll_down = Button(
             pygame.Rect(self.panel_rect.right - 32, self.panel_rect.bottom - 68, 20, 20),
-            "▼",
+            "v",
             theme.font_tiny,
             bg_color=(25, 35, 48),
             border_radius=2,
@@ -139,7 +139,7 @@ class NewsDetailModal:
         # 3. Kopfzeile
         UITheme.draw_text(
             surface,
-            "📰 GLOBALE NACHRICHTENZENTRALE",
+            "GLOBALE NACHRICHTENZENTRALE",
             self.theme.font_title,
             color=(255, 255, 255),
             pos=(self.panel_rect.left + 20, self.panel_rect.top + 16),
@@ -170,19 +170,19 @@ class NewsDetailModal:
         if prio == NewsPriority.ALERT:
             card_bg = (42, 16, 18)
             card_border = COLOR_DANGER
-            prio_badge = "⚠️ ALARM-MELDUNG"
+            prio_badge = "[ALARM-MELDUNG]"
         elif prio == NewsPriority.MILESTONE:
             card_bg = (38, 30, 14)
             card_border = COLOR_DNA
-            prio_badge = "⭐ MEILENSTEIN"
+            prio_badge = "[MEILENSTEIN]"
         elif prio == NewsPriority.INFO:
             card_bg = (16, 30, 44)
             card_border = (0, 150, 220)
-            prio_badge = "ℹ️ INFORMATION"
+            prio_badge = "[INFORMATION]"
         else:
             card_bg = (20, 26, 36)
             card_border = (50, 65, 85)
-            prio_badge = "📰 SCHLAGZEILE"
+            prio_badge = "[SCHLAGZEILE]"
 
         text_max_w = self.panel_rect.width - 70
         full_headline = world.news_mgr.current_headline
@@ -194,7 +194,7 @@ class NewsDetailModal:
         UITheme.draw_panel(surface, card_rect, bg_color=card_bg, border_color=card_border, border_radius=6, border_width=1)
         
         # Badge und Tag
-        tag_str = f"{prio_badge}  •  Tag {world.current_day}"
+        tag_str = f"{prio_badge}  |  Tag {world.current_day}"
         UITheme.draw_text(surface, tag_str, self.theme.font_tiny, color=card_border, pos=(card_rect.left + 12, card_rect.top + 8))
 
         # Volltext des aktuellen Eintrags
@@ -245,16 +245,16 @@ class NewsDetailModal:
                 # Farbkodierung
                 if item.priority == NewsPriority.ALERT:
                     i_col = COLOR_DANGER
-                    i_icon = "⚠️"
+                    i_icon = "[!]"
                 elif item.priority == NewsPriority.MILESTONE:
                     i_col = COLOR_DNA
-                    i_icon = "⭐"
+                    i_icon = "[*]"
                 elif item.priority == NewsPriority.INFO:
                     i_col = (0, 160, 240)
-                    i_icon = "ℹ️"
+                    i_icon = "[i]"
                 else:
                     i_col = COLOR_TEXT_MUTED
-                    i_icon = "📰"
+                    i_icon = "[+]"
 
                 # Tag-Badge
                 UITheme.draw_text(

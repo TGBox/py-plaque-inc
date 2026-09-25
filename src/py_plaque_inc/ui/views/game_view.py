@@ -24,6 +24,7 @@ from py_plaque_inc.ui.bubbles import BubbleView
 from py_plaque_inc.ui.views.country_view import CountryDetailView
 from py_plaque_inc.ui.views.world_view import WorldDetailView
 from py_plaque_inc.ui.views.news_view import NewsDetailModal
+from py_plaque_inc.ui.views.pause_view import PauseMenuModal
 
 
 class GameView:
@@ -42,11 +43,13 @@ class GameView:
         self.country_detail = CountryDetailView(theme)
         self.world_detail = WorldDetailView(theme)
         self.news_modal = NewsDetailModal(theme)
+        self.pause_menu = PauseMenuModal(theme)
 
         # Zustand
         self.is_showing_country_detail: bool = False
         self.is_showing_world_detail: bool = False
         self.is_showing_news_modal: bool = False
+        self.is_showing_pause_menu: bool = False
         self.selected_country_id: Optional[str] = None
 
     def _get_selected_name(self, world: World) -> Optional[str]:
@@ -65,6 +68,20 @@ class GameView:
         # Wenn Spiel vorbei ist
         if world.outcome != GameOutcome.ONGOING:
             return "game_over"
+
+        # Wenn Pausenmenü offen ist
+        if self.is_showing_pause_menu:
+            action = self.pause_menu.handle_event(event)
+            if action == "resume":
+                self.is_showing_pause_menu = False
+                return None
+            elif action == "menu":
+                self.is_showing_pause_menu = False
+                return "menu"
+            elif action == "quit":
+                self.is_showing_pause_menu = False
+                return "quit"
+            return None
 
         # Wenn News-Modal offen ist
         if self.is_showing_news_modal:
@@ -85,11 +102,19 @@ class GameView:
                 self.is_showing_country_detail = False
             return None
 
+        # Globale ESC-Taste während des Spiels öffnet das Pausenmenü
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.is_showing_pause_menu = True
+            return None
+
         # HUD Events
         hud_action = self.hud.handle_event(event, world)
         
         if hud_action == "evolution":
             return "evolution"
+        elif hud_action == "pause_menu":
+            self.is_showing_pause_menu = True
+            return None
         elif hud_action == "country" and self.selected_country_id:
             if self.selected_country_id == "world":
                 self.is_showing_world_detail = True
@@ -205,7 +230,7 @@ class GameView:
             UITheme.draw_panel(surface, banner_rect, bg_color=(20, 26, 38), border_color=(0, 180, 255), border_radius=6)
             UITheme.draw_text(
                 surface,
-                "👉 Klicke auf ein beliebiges Land, um den ersten Patienten zu infizieren!",
+                "> Klicke auf ein beliebiges Land, um den ersten Patienten zu infizieren!",
                 self.theme.font_body_bold,
                 color=(255, 255, 255),
                 pos=banner_rect.center,
@@ -227,3 +252,7 @@ class GameView:
         # 6. Nachrichten-Modal falls aktiv
         if self.is_showing_news_modal:
             self.news_modal.draw(surface, world)
+
+        # 7. Pausenmenü falls aktiv
+        if self.is_showing_pause_menu:
+            self.pause_menu.draw(surface)
