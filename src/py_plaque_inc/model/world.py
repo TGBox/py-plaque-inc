@@ -7,9 +7,11 @@ import random
 from py_plaque_inc.config import DIFFICULTIES
 from py_plaque_inc.model.country import Country
 from py_plaque_inc.model.pathogen import Pathogen, PathogenType
+from py_plaque_inc.model.upgrades import Upgrade
 from py_plaque_inc.model.transport import TransportManager
 from py_plaque_inc.model.events import NewsManager, NewsPriority
 from py_plaque_inc.map.geo_data import create_world_countries
+from py_plaque_inc.engine.save_manager import get_save_manager
 
 
 class GameOutcome:
@@ -56,8 +58,63 @@ class World:
         self.has_started: bool = False
         self.outcome = GameOutcome.ONGOING
 
+        # Erreger-Spezialmechaniken & Zähler
+        self._bio_weapon_days: int = 0
+        self._parasite_days: int = 0
+        self.pathogen.on_upgrade_unlocked = self._on_upgrade_unlocked
+
+        # Nano-Virus startet sofort mit aktiver Heilmittelforschung
+        if self.pathogen.pathogen_type == PathogenType.NANO_VIRUS:
+            self.cure_active = True
+            self.news_mgr.add_news(
+                "Labor-Alarm! Nanobots entwichen. Globale Forschung an Deaktivierungs-Codes läuft ab Tag 1!",
+                NewsPriority.ALERT,
+                0,
+            )
+
         # Ersten Datenpunkt sichern
         self._record_history()
+
+    def _on_upgrade_unlocked(self, upgrade: Upgrade, free_mutation: bool) -> None:
+        """Reagiert auf erforschte oder mutierte Upgrades mit Nachrichten und Spezialeffekten."""
+        self.news_mgr.notify_upgrade_unlocked(upgrade.id, upgrade.name, self.current_day)
+
+        # Sofortige Spezialeffekte
+        if upgrade.id == "spec_nano_fragment":
+            self.cure_progress = max(0.0, self.cure_progress - 15.0)
+            self.news_mgr.add_news(
+                "Cyber-Interferenz: Nano-Virus fragmentiert Forschungsdaten (-15% Heilmittel)!",
+                NewsPriority.ALERT,
+                self.current_day,
+            )
+        elif upgrade.id == "spec_bio_suppression":
+            self.pathogen.bonus_lethality = max(0.0, self.pathogen.bonus_lethality - 0.08)
+            self.news_mgr.add_news(
+                "Gen-Kompression: Tödlichkeit der Biowaffe temporär eingedämmt.",
+                NewsPriority.INFO,
+                self.current_day,
+            )
+        elif upgrade.id == "spec_bio_deactivate":
+            self.pathogen.bonus_lethality = 0.0
+            self.news_mgr.add_news(
+                "Neutralisierungs-Gen: Tödlichkeits-Eskalation der Biowaffe gestoppt!",
+                NewsPriority.MILESTONE,
+                self.current_day,
+            )
+        elif upgrade.id == "spec_bio_annihilation":
+            self.pathogen.bonus_lethality += 0.25
+            self.news_mgr.add_news(
+                "Vernichtungs-Sequenz: Biowaffe entfesselt maximale Zerstörungskraft!",
+                NewsPriority.ALERT,
+                self.current_day,
+            )
+        elif upgrade.id == "spec_brainrot_attention":
+            self.cure_progress = max(0.0, self.cure_progress - 10.0)
+            self.news_mgr.add_news(
+                "Aufmerksamkeitsspanne 3s: Forscher vergessen ihre Versuchsanordnungen (-10% Heilmittel)!",
+                NewsPriority.ALERT,
+                self.current_day,
+            )
 
     def toggle_pause(self) -> None:
         """Pausiert das Spiel oder stellt die vorherige Geschwindigkeit wieder her."""
@@ -117,6 +174,7 @@ class World:
             "dna_value": 3,
         })
 
+        self.news_mgr.notify_country_infected(country.id, country.name, self.current_day)
         self.news_mgr.add_news(
             f"Erster Ausbruch gemeldet: '{self.pathogen.name}' hat seinen Ursprung in {country.name}.",
             NewsPriority.ALERT,
@@ -139,6 +197,7 @@ class World:
             "pos": target.capital_pos,
             "dna_value": 3,
         })
+        self.news_mgr.notify_country_infected(target.id, target.name, self.current_day)
         self.news_mgr.add_news(
             f"Sporenausbruch: Pilzsporen überwinden Meere und infizieren {target.name}!",
             NewsPriority.INFO,
@@ -193,6 +252,7 @@ class World:
                         "pos": dest.capital_pos,
                         "dna_value": random.randint(2, 4),
                     })
+                    self.news_mgr.notify_country_infected(dest.id, dest.name, self.current_day)
                     self.news_mgr.add_news(
                         f"Infiziertes Fahrzeug erreicht {dest.name}! Der Erreger breitet sich aus.",
                         NewsPriority.INFO,
@@ -203,10 +263,35 @@ class World:
         """Führt alle Simulationsberechnungen für einen einzelnen Tag durch."""
         self.current_day += 1
 
+        # Spezifische Erreger-Tagesmechaniken
+        if self.pathogen.pathogen_type == PathogenType.BIO_WEAPON:
+            # Tödlichkeit eskaliert stetig von selbst, außer wenn durch Deaktivierung neutralisiert
+            is_deactivated = self.pathogen.upgrades.get("spec_bio_deactivate", None)
+            if not (is_deactivated and is_deactivated.unlocked):
+                self._bio_weapon_days += 1
+                if self._bio_weapon_days >= 6:
+                    self._bio_weapon_days = 0
+                    self.pathogen.bonus_lethality += 0.035
+
+        elif self.pathogen.pathogen_type == PathogenType.PARASITE:
+            # Passive DNA-Generierung im Verborgenen
+            symbiosis = self.pathogen.upgrades.get("spec_parasite_symbiosis", None)
+            threshold_days = 4 if (symbiosis and symbiosis.unlocked) else 7
+            if self.pathogen.total_severity < 2.5:
+                self._parasite_days += 1
+                if self._parasite_days >= threshold_days:
+                    self._parasite_days = 0
+                    self.pathogen.dna_points += 1
+
         # 1. Lokale Länderberechnung
         diff_trans = self.difficulty_cfg["transmission_multiplier"]
         for country in self.countries.values():
             if country.is_infected:
+                infect_mult = diff_trans
+                # Brainrot verbreitet sich in wohlhabenden Ländern über Smartphones und Medien rasend schnell (+35%)
+                if self.pathogen.pathogen_type == PathogenType.BRAINROT and country.is_rich:
+                    infect_mult *= 1.35
+
                 new_inf, new_dead = country.update_day(
                     base_infectivity=self.pathogen.total_infectivity,
                     base_severity=self.pathogen.total_severity,
@@ -214,7 +299,7 @@ class World:
                     cold_res=self.pathogen.cold_res,
                     heat_res=self.pathogen.heat_res,
                     drug_res=self.pathogen.drug_res,
-                    difficulty_mult=diff_trans,
+                    difficulty_mult=infect_mult,
                     current_day=self.current_day,
                 )
 
@@ -280,6 +365,9 @@ class World:
             current_day=self.current_day,
         )
 
+        # 6b. Erregerspezifische witzige Schlagzeilen und Weltgeschehen
+        self.news_mgr.check_flavor(self.pathogen.pathogen_type, self.current_day)
+
         # 7. Historie aufzeichnen (alle 2 Tage)
         if self.current_day % 2 == 0:
             self._record_history()
@@ -309,6 +397,7 @@ class World:
                                 "pos": neighbor.capital_pos,
                                 "dna_value": 2,
                             })
+                            self.news_mgr.notify_country_infected(neighbor.id, neighbor.name, self.current_day)
                             self.news_mgr.add_news(
                                 f"Grenzübertritt: '{self.pathogen.name}' breitet sich über Land nach {neighbor.name} aus.",
                                 NewsPriority.INFO,
@@ -336,9 +425,30 @@ class World:
         # Resistenz-Modifikator
         slowdown = 1.0 - self.pathogen.cure_slow
         diff_cure = self.difficulty_cfg["cure_speed_multiplier"]
+
+        # Erregerspezifische Heilmittel-Modifikatoren
+        pathogen_cure_mod = 1.0
+        if self.pathogen.pathogen_type == PathogenType.PRION:
+            # Prionen sind biologisch extrem schwer aufzuklären (-35% Heilmittel-Geschwindigkeit)
+            pathogen_cure_mod *= 0.65
+            prion_atrophy = self.pathogen.upgrades.get("spec_prion_atrophy", None)
+            if prion_atrophy and prion_atrophy.unlocked:
+                pathogen_cure_mod *= 0.70
+        elif self.pathogen.pathogen_type == PathogenType.BRAINROT:
+            # Je mehr Menschen infiziert sind, desto mehr Forscher doomscrollen statt Heilmittel zu sequenzieren!
+            inf_ratio = self.total_infected / max(1, self.total_population)
+            distraction = inf_ratio * 0.45
+            doomscroll = self.pathogen.upgrades.get("spec_brainrot_doomscroll", None)
+            if doomscroll and doomscroll.unlocked:
+                distraction += 0.25
+            pathogen_cure_mod *= max(0.15, 1.0 - distraction)
+        elif self.pathogen.pathogen_type == PathogenType.PARASITE:
+            # Bei geringer Schwere bleibt der Parasit von den Laboren weitgehend ignoriert
+            if self.pathogen.total_severity < 1.0:
+                pathogen_cure_mod *= 0.60
         
         # Basis-Geschwindigkeit des Heilmittels
-        daily_increase = (total_effort * 0.0075) * slowdown * diff_cure
+        daily_increase = (total_effort * 0.0075) * slowdown * diff_cure * pathogen_cure_mod
         self.cure_daily_rate = daily_increase
         self.cure_progress = min(100.0, self.cure_progress + daily_increase)
 
@@ -374,6 +484,15 @@ class World:
                 NewsPriority.ALERT,
                 self.current_day,
             )
+            # Speichere Sieg und schalte nächsten Erreger frei
+            save_mgr = get_save_manager()
+            unlocked_next = save_mgr.record_win(self.pathogen.pathogen_type)
+            if unlocked_next:
+                self.news_mgr.add_news(
+                    f"FORTSCHRITT: Neuer Erregertyp '{unlocked_next.value}' freigeschaltet!",
+                    NewsPriority.MILESTONE,
+                    self.current_day,
+                )
             self._record_history()
             return
 

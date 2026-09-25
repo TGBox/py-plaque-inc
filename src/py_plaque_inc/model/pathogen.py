@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 import random
 
 from py_plaque_inc.model.upgrades import Upgrade, UpgradeCategory, get_default_upgrades
@@ -12,6 +12,11 @@ class PathogenType(str, Enum):
     BACTERIA = "Bakterie"
     VIRUS = "Virus"
     FUNGUS = "Pilz"
+    PARASITE = "Parasit"
+    PRION = "Prion"
+    NANO_VIRUS = "Nano-Virus"
+    BIO_WEAPON = "Biowaffe"
+    BRAINROT = "Brainrot"
 
 
 PATHOGEN_INFO = {
@@ -23,6 +28,7 @@ PATHOGEN_INFO = {
         "base_severity": 0.0,
         "base_lethality": 0.0,
         "mutation_rate": 0.02,
+        "perk": "Bakterielle Schutzhülle: Robuste Zellwand schützt in allen Klimazonen.",
     },
     PathogenType.VIRUS: {
         "id": "virus",
@@ -32,6 +38,7 @@ PATHOGEN_INFO = {
         "base_severity": 0.0,
         "base_lethality": 0.0,
         "mutation_rate": 0.09,
+        "perk": "Virale Instabilität: Hohe Mutationsrate schaltet kostenlose Symptome frei.",
     },
     PathogenType.FUNGUS: {
         "id": "fungus",
@@ -41,6 +48,57 @@ PATHOGEN_INFO = {
         "base_severity": 0.0,
         "base_lethality": 0.0,
         "mutation_rate": 0.01,
+        "perk": "Sporenausbruch: Kann Sporen abfeuern, um entfernte Inseln und Länder direkt zu infizieren.",
+    },
+    PathogenType.PARASITE: {
+        "id": "parasite",
+        "name": "Parasit",
+        "description": "Nistet sich unbemerkt im Wirtsorganismus ein. Verringert die Entdeckungswahrscheinlichkeit drastisch und erzeugt heimlich DNA-Punkte, solange er unbemerkt bleibt.",
+        "base_infectivity": 0.85,
+        "base_severity": 0.0,
+        "base_lethality": 0.0,
+        "mutation_rate": 0.015,
+        "perk": "Symbiotische Tarnung: Heilmittelforschung startet viel später; passive DNA-Generierung im Verborgenen.",
+    },
+    PathogenType.PRION: {
+        "id": "prion",
+        "name": "Prion",
+        "description": "Ein komplexes, fehlgefaltetes Protein im Gehirn. Breitet sich langsam aus, ist jedoch für die Wissenschaftler extrem schwer zu heilen.",
+        "base_infectivity": 0.70,
+        "base_severity": 0.1,
+        "base_lethality": 0.0,
+        "mutation_rate": 0.005,
+        "perk": "Neural-Atrophie: Globale Heilmittelforschung ist von Natur aus dauerhaft um 40% verlangsamt.",
+    },
+    PathogenType.NANO_VIRUS: {
+        "id": "nano_virus",
+        "name": "Nano-Virus",
+        "description": "Aus einem Hochsicherheitslabor entwichene Nanobots. Die Menschheit kennt die Signatur: Das Heilmittel wird von Tag 1 an mit Hochdruck erforscht!",
+        "base_infectivity": 1.35,
+        "base_severity": 0.15,
+        "base_lethality": 0.0,
+        "mutation_rate": 0.03,
+        "perk": "Cyber-Interferenz: Spezielle Hacking-Fähigkeiten werfen den Heilmittelfortschritt zurück.",
+    },
+    PathogenType.BIO_WEAPON: {
+        "id": "bio_weapon",
+        "name": "Biowaffe",
+        "description": "Militärisch gezüchteter Killervirus. Extrem instabil: Seine Tödlichkeit steigt im Laufe der Zeit von selbst an! Du musst Gene komprimieren, um Wirte am Leben zu halten.",
+        "base_infectivity": 1.15,
+        "base_severity": 0.2,
+        "base_lethality": 0.03,
+        "mutation_rate": 0.04,
+        "perk": "Lethale Eskalation: Steigende Eigenschwere; Gen-Kompression senkt Tödlichkeit temporär.",
+    },
+    PathogenType.BRAINROT: {
+        "id": "brainrot",
+        "name": "Brainrot",
+        "description": "Ein kognitiver Medienvirus, der über Kurzvideos, Memes und Shitposts das Nervensystem kapert. Reiche, vernetzte Nationen fallen ihm in Rekordzeit zum Opfer!",
+        "base_infectivity": 1.55,
+        "base_severity": 0.1,
+        "base_lethality": 0.0,
+        "mutation_rate": 0.08,
+        "perk": "Doomscrolling: Rasante Ausbreitung in reichen Ländern; Forscher doomscrollen statt Heilmittel zu finden.",
     },
 }
 
@@ -71,6 +129,7 @@ class Pathogen:
 
         # Zähler für freigeschaltete Upgrades
         self.unlocked_count: int = 0
+        self.on_upgrade_unlocked: Optional[Callable[[Upgrade, bool], None]] = None
 
     @property
     def total_infectivity(self) -> float:
@@ -132,6 +191,9 @@ class Pathogen:
         self.heat_res = min(1.0, self.heat_res + upgrade.heat_res)
         self.drug_res = min(1.0, self.drug_res + upgrade.drug_res)
         self.cure_slow = min(0.8, self.cure_slow + upgrade.cure_slow)
+
+        if self.on_upgrade_unlocked:
+            self.on_upgrade_unlocked(upgrade, free_mutation)
 
         return True
 
