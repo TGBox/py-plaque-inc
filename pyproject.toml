@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 py-plaque-inc = "py_plaque_inc:main"
+main = "py_plaque_inc:main"
 
 [build-system]
 requires = ["uv_build>=0.12.6,<0.13.0"]
