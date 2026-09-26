@@ -133,6 +133,8 @@ class PlagueGame:
         self.evolution_view = EvolutionView(self.theme)
         self.game_over_view = GameOverView(self.theme)
         self.state = GameState.PLAYING
+        # Key-Repeat im Spiel deaktivieren
+        pygame.key.set_repeat(0, 0)
 
     def run(self) -> None:
         """Hauptschleife des Spiels."""

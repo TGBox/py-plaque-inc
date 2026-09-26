@@ -429,5 +429,76 @@ def test_fullscreen_1080p_and_ultrawide_clicktarget_calculation():
     pygame.quit()
 
 
+def test_pathogen_name_editing_key_repeat_and_clear_button():
+    """Prüft Namenseingabe, Key-Repeat (Gedrückthalten von Backspace), Shortcuts und den Clear-Button."""
+    game = PlagueGame()
+    assert game.state == GameState.MENU
+    menu = game.menu_view
+    assert menu.pathogen_name == "Plaque-X"
+    assert menu.is_editing_name is False
+    assert pygame.key.get_repeat() == (0, 0)
+
+    # 1. Klick in die Namensleiste oben
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": menu.name_box_rect.center, "button": 1}))
+    assert menu.is_editing_name is True
+    # Key-Repeat muss aktiv sein (250ms, 30ms)
+    assert pygame.key.get_repeat() == (250, 30)
+
+    # 2. Backspace löscht Zeichen
+    game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_BACKSPACE, "unicode": "", "mod": 0}))
+    assert menu.pathogen_name == "Plaque-"
+
+    # 3. Mehrfaches/Gedrücktes Backspace bis das Feld leer ist
+    for _ in range(10):
+        game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_BACKSPACE, "unicode": "", "mod": 0}))
+    assert menu.pathogen_name == ""
+
+    # Frame rendern mit leerem Feld
+    game._draw()
+
+    # 4. Neuen Namen tippen
+    for char in "SuperVirus":
+        game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": ord(char.lower()), "unicode": char, "mod": 0}))
+    assert menu.pathogen_name == "SuperVirus"
+    game._draw()
+
+    # 5. Klick auf den Clear-Button '✕' leert das Feld sofort
+    assert menu.btn_clear_name_rect.width > 0
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": menu.btn_clear_name_rect.center, "button": 1}))
+    assert menu.pathogen_name == ""
+    assert menu.is_editing_name is True
+
+    # 6. Weiteren Namen tippen und mit Ctrl+Backspace leeren
+    for char in "Test":
+        game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": ord(char.lower()), "unicode": char, "mod": 0}))
+    assert menu.pathogen_name == "Test"
+    game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_BACKSPACE, "unicode": "", "mod": pygame.KMOD_CTRL}))
+    assert menu.pathogen_name == ""
+
+    # 7. Name tippen und mit Ctrl+A leeren
+    for char in "Corona":
+        game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": ord(char.lower()), "unicode": char, "mod": 0}))
+    assert menu.pathogen_name == "Corona"
+    game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_a, "unicode": "a", "mod": pygame.KMOD_CTRL}))
+    assert menu.pathogen_name == ""
+
+    # 8. Namen eintragen und mit Enter bestätigen -> Editing beendet, Repeat aus
+    for char in "Final-Flu":
+        game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": ord(char.lower()), "unicode": char, "mod": 0}))
+    game._handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_RETURN, "unicode": "", "mod": 0}))
+    assert menu.is_editing_name is False
+    assert pygame.key.get_repeat() == (0, 0)
+    assert menu.pathogen_name == "Final-Flu"
+
+    # 9. Spiel starten -> pathogen.name muss "Final-Flu" sein und repeat bleibt (0, 0)
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": menu.btn_start.rect.center, "button": 1}))
+    assert game.state == GameState.PLAYING
+    assert game.world.pathogen.name == "Final-Flu"
+    assert pygame.key.get_repeat() == (0, 0)
+
+    pygame.quit()
+
+
+
 
 

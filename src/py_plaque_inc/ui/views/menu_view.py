@@ -126,6 +126,7 @@ class MenuView:
 
         # Panel- und Layout-Rechtecke initial berechnen
         self.name_box_rect = dummy_rect
+        self.btn_clear_name_rect = dummy_rect
         self.panel_left_rect = dummy_rect
         self.panel_right_rect = dummy_rect
         self.pathogen_card_rect = dummy_rect
@@ -150,6 +151,15 @@ class MenuView:
             if PATHOGEN_INFO[ptype]["id"] == type_id:
                 self.select_type_by_index(i)
                 break
+
+    def set_editing_name(self, editing: bool) -> None:
+        """Aktiviert/deaktiviert Namens-Eingabemodus und Tastaturwiederholung (Key-Repeat)."""
+        self.is_editing_name = editing
+        if editing:
+            # 250ms Verzögerung, danach alle 30ms ein Wiederholungs-Event (ermöglicht Gedrückthalten von Löschen)
+            pygame.key.set_repeat(250, 30)
+        else:
+            pygame.key.set_repeat(0, 0)
 
     def update_layout(self, width: int, height: int) -> None:
         """Passt das Menü-Layout dynamisch an verfügbare Fenstergröße, Vollbild und Widescreen an."""
@@ -182,6 +192,14 @@ class MenuView:
         name_box_h = 40 if is_spacious else 34
         name_box_y = name_label_y + (22 if is_spacious else 16)
         self.name_box_rect = pygame.Rect(width // 2 - name_box_w // 2, name_box_y, name_box_w, name_box_h)
+        btn_clear_w = 22
+        btn_clear_h = name_box_h - 10
+        self.btn_clear_name_rect = pygame.Rect(
+            self.name_box_rect.right - btn_clear_w - 6,
+            self.name_box_rect.y + 5,
+            btn_clear_w,
+            btn_clear_h,
+        )
 
         # 2. Hauptspalten Vertikalmaße
         panel_top = name_box_y + name_box_h + (20 if is_spacious else 14)
@@ -279,16 +297,26 @@ class MenuView:
         Verarbeitet Tastatur- und Mauseingaben im Menü.
         Gibt 'quit' zurück, oder ein Tupel (name, type, diff, res), wenn das Spiel startet.
         """
-        # Namens-Eingabefeld aktivieren / deaktivieren
+        # Namens-Eingabefeld aktivieren / deaktivieren / per Button leeren
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.is_editing_name = self.name_box_rect.collidepoint(event.pos)
+            if self.is_editing_name and self.pathogen_name and self.btn_clear_name_rect.collidepoint(event.pos):
+                self.pathogen_name = ""
+                return None
 
-        # Tastatureingabe für Erreger-Namen
+            clicked_box = self.name_box_rect.collidepoint(event.pos)
+            self.set_editing_name(clicked_box)
+
+        # Tastatureingabe für Erreger-Namen (unterstützt Halten von Backspace/Delete und Shortcuts)
         if event.type == pygame.KEYDOWN and self.is_editing_name:
             if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
-                self.is_editing_name = False
-            elif event.key == pygame.K_BACKSPACE:
-                self.pathogen_name = self.pathogen_name[:-1]
+                self.set_editing_name(False)
+            elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                if event.mod & pygame.KMOD_CTRL:
+                    self.pathogen_name = ""
+                else:
+                    self.pathogen_name = self.pathogen_name[:-1]
+            elif event.key == pygame.K_a and (event.mod & pygame.KMOD_CTRL):
+                self.pathogen_name = ""
             elif len(self.pathogen_name) < 18 and event.unicode and event.unicode.isprintable():
                 self.pathogen_name += event.unicode
 
@@ -338,6 +366,7 @@ class MenuView:
                 self.lock_warning_timer = 120  # Warnung für ~2 Sekunden aufblinken lassen
                 return None
 
+            self.set_editing_name(False)
             clean_name = self.pathogen_name.strip() or "Plaque-X"
             return clean_name, self.selected_type, self.selected_diff, self.selected_res
 
@@ -397,16 +426,42 @@ class MenuView:
         box_bg = (24, 34, 48) if self.is_editing_name else COLOR_PANEL_BG
         UITheme.draw_panel(surface, self.name_box_rect, bg_color=box_bg, border_color=box_border, border_radius=6, border_width=2 if self.is_editing_name else 1)
 
-        show_cursor = self.is_editing_name and ((pygame.time.get_ticks() // 500) % 2 == 0)
-        display_name = self.pathogen_name + ("|" if show_cursor else "")
-        UITheme.draw_text(
-            surface,
-            display_name,
-            self.theme.font_header,
-            color=(255, 255, 255),
-            pos=self.name_box_rect.center,
-            align="center",
-        )
+        if not self.pathogen_name and not self.is_editing_name:
+            UITheme.draw_text(
+                surface,
+                "Name eingeben...",
+                self.theme.font_body,
+                color=COLOR_TEXT_MUTED,
+                pos=self.name_box_rect.center,
+                align="center",
+            )
+        else:
+            show_cursor = self.is_editing_name and ((pygame.time.get_ticks() // 500) % 2 == 0)
+            display_name = self.pathogen_name + ("|" if show_cursor else "")
+            UITheme.draw_text(
+                surface,
+                display_name,
+                self.theme.font_header,
+                color=(255, 255, 255),
+                pos=self.name_box_rect.center,
+                align="center",
+            )
+
+        # Schnelles Lösch-Icon (✕) anzeigen, wenn Text vorhanden ist und editiert wird
+        if self.is_editing_name and self.pathogen_name:
+            clear_rect = self.btn_clear_name_rect
+            is_clear_hovered = clear_rect.collidepoint(pygame.mouse.get_pos())
+            clear_bg = (60, 25, 30) if is_clear_hovered else (40, 20, 25)
+            clear_border = (220, 70, 80) if is_clear_hovered else (140, 50, 60)
+            UITheme.draw_panel(surface, clear_rect, bg_color=clear_bg, border_color=clear_border, border_radius=4)
+            UITheme.draw_text(
+                surface,
+                "✕",
+                self.theme.font_small,
+                color=(255, 180, 180) if is_clear_hovered else (200, 140, 140),
+                pos=clear_rect.center,
+                align="center",
+            )
 
         # ==========================================
         # 2. LINKE SPALTE: Erreger-Auswahl & Karussell
