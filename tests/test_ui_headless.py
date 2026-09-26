@@ -499,6 +499,49 @@ def test_pathogen_name_editing_key_repeat_and_clear_button():
     pygame.quit()
 
 
+def test_evolution_tree_double_click_buy_and_double_right_click_sell():
+    """Prüft Doppelklick (Kaufen) und Doppel-Rechtsklick (Verkaufen) im Evolutionsbaum."""
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="Click-Test", pathogen_type=PathogenType.BACTERIA, difficulty="Normal")
+    game.world.select_starting_country("deu")
+    game.state = GameState.EVOLUTION
+    evo = game.evolution_view
+    pathogen = game.world.pathogen
+
+    pathogen.dna_points = 30
+    air1 = pathogen.upgrades["trans_air_1"]
+    assert air1.unlocked is False
+
+    air1_pos = evo._get_node_screen_pos(air1.grid_pos)
+
+    # 1. Einzelklick links: Wählt den Knoten nur aus, kauft ihn aber NICHT
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": air1_pos, "button": 1}))
+    assert evo.selected_upgrade_id == "trans_air_1"
+    assert air1.unlocked is False
+
+    # 2. Zweiter Klick links (Doppelklick innerhalb des Zeitfensters): Kauft das Upgrade!
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": air1_pos, "button": 1}))
+    assert air1.unlocked is True
+    assert pathogen.dna_points == 30 - air1.cost
+
+    # Rendern des Baums mit gekauftem Upgrade
+    game._draw()
+
+    # 3. Einzelklick rechts: Wählt Knoten aus, verkauft ihn aber NICHT
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": air1_pos, "button": 3}))
+    assert air1.unlocked is True
+
+    # 4. Zweiter Klick rechts (Doppel-Rechtsklick): Verkauft/Rückentwickelt das Upgrade (+2 DNA)!
+    dna_before_sell = pathogen.dna_points
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": air1_pos, "button": 3}))
+    assert air1.unlocked is False
+    assert pathogen.dna_points == dna_before_sell + 2
+
+    game._draw()
+    pygame.quit()
+
+
+
 
 
 

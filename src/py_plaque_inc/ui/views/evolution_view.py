@@ -73,6 +73,13 @@ class EvolutionView:
         self.tree_rect = pygame.Rect(40, 80, 860, 520)
         self.detail_rect = pygame.Rect(920, 80, 320, 520)
 
+        # Doppelklick-Verwaltung für schnelles Kaufen / Verkaufen
+        self._last_left_click_time: int = 0
+        self._last_left_click_id: Optional[str] = None
+        self._last_right_click_time: int = 0
+        self._last_right_click_id: Optional[str] = None
+        self._double_click_threshold_ms: int = 450
+
     def _is_visible(self, upgrade: Upgrade, pathogen: Pathogen) -> bool:
         """Prüft, ob ein Upgrade für den aktuellen Erregertyp sichtbar ist."""
         if upgrade.is_pathogen_exclusive:
@@ -103,13 +110,55 @@ class EvolutionView:
                         self.selected_upgrade_id = u.id
                         break
 
-        # Klick auf Baum-Knoten
+        # Klick auf Baum-Knoten (Links-Klick: Auswählen / Doppelklick: Kaufen)
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             clicked_id = self._get_node_at_pos(event.pos, pathogen)
             if clicked_id:
+                now = pygame.time.get_ticks()
+                is_double_click = (
+                    clicked_id == self._last_left_click_id
+                    and (now - self._last_left_click_time) <= self._double_click_threshold_ms
+                )
                 self.selected_upgrade_id = clicked_id
 
-        # Erforschen- / Rückentwickeln-Button
+                if is_double_click:
+                    # Doppelklick links: Kaufen / Erforschen
+                    self._last_left_click_time = 0
+                    self._last_left_click_id = None
+                    upgrade = pathogen.upgrades[clicked_id]
+                    if not upgrade.unlocked:
+                        can_buy, _ = pathogen.can_unlock(clicked_id)
+                        if can_buy:
+                            pathogen.unlock_upgrade(clicked_id)
+                else:
+                    self._last_left_click_time = now
+                    self._last_left_click_id = clicked_id
+
+        # Klick auf Baum-Knoten (Rechts-Klick: Auswählen / Doppel-Rechtsklick: Verkaufen)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+            clicked_id = self._get_node_at_pos(event.pos, pathogen)
+            if clicked_id:
+                now = pygame.time.get_ticks()
+                is_double_right = (
+                    clicked_id == self._last_right_click_id
+                    and (now - self._last_right_click_time) <= self._double_click_threshold_ms
+                )
+                self.selected_upgrade_id = clicked_id
+
+                if is_double_right:
+                    # Doppel-Rechtsklick: Verkaufen / Rückentwickeln
+                    self._last_right_click_time = 0
+                    self._last_right_click_id = None
+                    upgrade = pathogen.upgrades[clicked_id]
+                    if upgrade.unlocked:
+                        can_devolve, _ = pathogen.can_devolve(clicked_id)
+                        if can_devolve:
+                            pathogen.devolve_upgrade(clicked_id)
+                else:
+                    self._last_right_click_time = now
+                    self._last_right_click_id = clicked_id
+
+        # Erforschen- / Rückentwickeln-Button (Klick auf Button)
         if self.selected_upgrade_id and self.btn_unlock.handle_event(event):
             upgrade = pathogen.upgrades[self.selected_upgrade_id]
             if upgrade.unlocked:
@@ -273,6 +322,15 @@ class EvolutionView:
             stat_y += 18
 
         # Kauf- / Rückentwickeln-Button
+        UITheme.draw_text(
+            surface,
+            "Doppelklick: Kaufen  |  Doppel-Rechtsklick: Verkaufen",
+            self.theme.font_tiny,
+            color=COLOR_TEXT_MUTED,
+            pos=(self.btn_unlock.rect.centerx, self.btn_unlock.rect.top - 12),
+            align="center",
+        )
+
         if upgrade.unlocked:
             can_devolve, reason = pathogen.can_devolve(upgrade.id)
             self.btn_unlock.enabled = can_devolve
