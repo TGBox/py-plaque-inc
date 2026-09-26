@@ -247,7 +247,7 @@ class GameView:
         elif self.is_showing_country_detail and self.selected_country_id:
             c = world.countries.get(self.selected_country_id)
             if c:
-                self.country_detail.draw(surface, c)
+                self.country_detail.draw(surface, c, world)
 
         # 6. Nachrichten-Modal falls aktiv
         if self.is_showing_news_modal:

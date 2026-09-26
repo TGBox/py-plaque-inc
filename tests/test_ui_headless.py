@@ -541,6 +541,89 @@ def test_evolution_tree_double_click_buy_and_double_right_click_sell():
     pygame.quit()
 
 
+def test_country_detail_ship_traffic_and_infection_diagnosis():
+    """Prüft die Anzeige von ein- und ausgehenden Schiffen sowie der Infektions-Diagnose im Country Detail."""
+    from py_plaque_inc.model.transport import TransportRoute, TransportType, get_country_sea_routes
+
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="Seewege-Test", pathogen_type=PathogenType.BACTERIA, difficulty="Normal")
+    game.world.select_starting_country("deu")
+
+    world = game.world
+    tm = world.transport_mgr
+
+    # 1. Seerouten-Helfer testen
+    gln_routes = get_country_sea_routes("gln")
+    assert len(gln_routes) > 0
+    # Deutschland Seerouten
+    deu_routes = get_country_sea_routes("deu")
+    assert len(deu_routes) > 0
+    # Binnenstaat CEU Seerouten = leer
+    ceu_routes = get_country_sea_routes("ceu")
+    assert len(ceu_routes) == 0
+
+    # 2. Schiffszählung testen
+    # Füge manuell 2 Schiffe ein:
+    # Route 1: deu -> gln (infiziert)
+    s1 = TransportRoute(
+        origin_id="deu",
+        destination_id="gln",
+        transport_type=TransportType.SHIP,
+        start_pos=(100, 100),
+        end_pos=(50, 50),
+        is_infected=True,
+    )
+    # Route 2: gln -> isl (gesund)
+    s2 = TransportRoute(
+        origin_id="gln",
+        destination_id="isl",
+        transport_type=TransportType.SHIP,
+        start_pos=(50, 50),
+        end_pos=(80, 40),
+        is_infected=False,
+    )
+    tm.active_transports.extend([s1, s2])
+
+    # Grönland (gln): 1 einlaufend (infiziert), 1 auslaufend (gesund)
+    in_s, out_s = tm.get_ship_count_for_country("gln")
+    assert in_s == 1
+    assert out_s == 1
+    in_list, out_list = tm.get_ships_for_country("gln")
+    assert any(s.is_infected for s in in_list)
+
+    # Deutschland (deu): 0 einlaufend, 1 auslaufend
+    in_s_deu, out_s_deu = tm.get_ship_count_for_country("deu")
+    assert in_s_deu == 0
+    assert out_s_deu == 1
+
+    # 3. Rendern des Detail-Fensters für Grönland (Insel), Deutschland (Küste) und Mitteleuropa (Binnenland)
+    surf = pygame.Surface((1280, 720))
+
+    # Grönland Detail rendern
+    gln = world.countries["gln"]
+    game.game_view.country_detail.draw(surf, gln, world)
+
+    # Deutschland Detail rendern
+    deu = world.countries["deu"]
+    game.game_view.country_detail.draw(surf, deu, world)
+
+    # Binnenland CEU rendern
+    ceu = world.countries["ceu"]
+    game.game_view.country_detail.draw(surf, ceu, world)
+
+    # Schließe Hafen von Grönland und prüfe Diagnose-Anzeige beim Rendern
+    gln.ports_open = False
+    game.game_view.country_detail.draw(surf, gln, world)
+
+    # Rendern über game._draw() mit geöffnetem Popup
+    game.game_view.selected_country_id = "gln"
+    game.game_view.is_showing_country_detail = True
+    game._draw()
+
+    pygame.quit()
+
+
+
 
 
 

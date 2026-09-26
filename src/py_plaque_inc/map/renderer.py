@@ -222,7 +222,7 @@ class MapRenderer:
         if self.hovered_country_id and self.hovered_country_id in countries:
             h_country = countries[self.hovered_country_id]
             cx, cy = h_country.capital_pos
-            self._draw_hover_badge(surface, h_country, cx, cy, font_badge)
+            self._draw_hover_badge(surface, h_country, cx, cy, font_badge, transport_mgr)
 
     def _draw_hover_badge(
         self,
@@ -231,6 +231,7 @@ class MapRenderer:
         cx: int,
         cy: int,
         font: pygame.font.Font,
+        transport_mgr: Optional[TransportManager] = None,
     ) -> None:
         """Zeichnet ein modernes taktisches Floating-Badge mit Infektionsstatus und Einwohnerzahl."""
         pop_str = (
@@ -240,7 +241,21 @@ class MapRenderer:
         )
         inf_pct = country.infection_ratio * 100
         status_str = f"Infiziert: {inf_pct:.1f}%"
-        badge_text = f"{country.name.upper()} ({pop_str})  •  {status_str}"
+
+        # Schiffsinformationen direkt im Karten-Badge
+        ship_str = ""
+        if transport_mgr and country.has_seaport:
+            in_s, out_s = transport_mgr.get_ship_count_for_country(country.id)
+            if in_s > 0 or out_s > 0:
+                ship_str = f"  •  ⚓ {in_s} ein / {out_s} aus"
+            elif not country.seaports_open:
+                ship_str = "  •  ⚓ Hafen zu"
+            else:
+                ship_str = "  •  ⚓ Hafen offen"
+        elif not country.has_seaport:
+            ship_str = "  •  Binnenland"
+
+        badge_text = f"{country.name.upper()} ({pop_str})  •  {status_str}{ship_str}"
 
         txt_surf = font.render(badge_text, True, (245, 250, 255))
         badge_rect = txt_surf.get_rect(center=(cx, cy - 24))

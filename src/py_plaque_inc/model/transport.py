@@ -85,6 +85,7 @@ REGIONAL_ROUTES = {
     "bra": ["usa", "col", "arg", "zaf", "fra", "esp"],
     "arg": ["bra", "chl", "bol", "zaf", "usa"],
     "chl": ["arg", "bol", "per", "aus"],
+    "per": ["col", "chl", "bra", "mex", "aus"],
     "deu": ["fra", "gbr", "usa", "rus", "chn", "pol", "ceu", "sca"],
     "ceu": ["deu", "fra", "ita", "gbr", "usa", "pol", "bal"],
     "fra": ["gbr", "deu", "esp", "ita", "usa", "bra", "ceu"],
@@ -116,11 +117,50 @@ REGIONAL_ROUTES = {
 }
 
 
+LANDLOCKED_COUNTRIES = {"ceu", "bol", "kaz", "mon"}
+
+
+def get_country_sea_routes(country_id: str, countries: Optional[dict] = None) -> List[str]:
+    """Gibt alle Ziel-Länder-IDs zurück, zu denen von diesem Land aus Seerouten führen."""
+    if countries is not None:
+        c = countries.get(country_id)
+        if c and not getattr(c, "has_seaport", True):
+            return []
+        routes = REGIONAL_ROUTES.get(country_id, [])
+        return [dest for dest in routes if countries.get(dest) and getattr(countries[dest], "has_seaport", True)]
+
+    if country_id in LANDLOCKED_COUNTRIES:
+        return []
+    return [dest for dest in REGIONAL_ROUTES.get(country_id, []) if dest not in LANDLOCKED_COUNTRIES]
+
+
 class TransportManager:
     """Verwaltet alle aktiven Flugzeuge und Schiffe auf der Weltkarte."""
 
     def __init__(self):
         self.active_transports: List[TransportRoute] = []
+
+    def get_ships_for_country(self, country_id: str) -> Tuple[List[TransportRoute], List[TransportRoute]]:
+        """Gibt (eingehende_schiffe, ausgehende_schiffe) als Routen-Listen zurück."""
+        inbound = [t for t in self.active_transports if t.destination_id == country_id and t.transport_type == TransportType.SHIP]
+        outbound = [t for t in self.active_transports if t.origin_id == country_id and t.transport_type == TransportType.SHIP]
+        return inbound, outbound
+
+    def get_ship_count_for_country(self, country_id: str) -> Tuple[int, int]:
+        """Gibt (anzahl_eingehend, anzahl_ausgehend) für Schiffe/Boote eines Landes zurück."""
+        inbound, outbound = self.get_ships_for_country(country_id)
+        return len(inbound), len(outbound)
+
+    def get_airplanes_for_country(self, country_id: str) -> Tuple[List[TransportRoute], List[TransportRoute]]:
+        """Gibt (eingehende_fluege, ausgehende_fluege) als Routen-Listen zurück."""
+        inbound = [t for t in self.active_transports if t.destination_id == country_id and t.transport_type in (TransportType.AIRPLANE, TransportType.CURE_PLANE)]
+        outbound = [t for t in self.active_transports if t.origin_id == country_id and t.transport_type in (TransportType.AIRPLANE, TransportType.CURE_PLANE)]
+        return inbound, outbound
+
+    def get_airplane_count_for_country(self, country_id: str) -> Tuple[int, int]:
+        """Gibt (anzahl_eingehend, anzahl_ausgehend) für Flüge eines Landes zurück."""
+        inbound, outbound = self.get_airplanes_for_country(country_id)
+        return len(inbound), len(outbound)
 
     def spawn_random_transport(
         self,
