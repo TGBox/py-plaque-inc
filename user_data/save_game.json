@@ -4,8 +4,9 @@
     "virus",
     "fungus"
   ],
-  "all_unlocked_cheat": true,
+  "all_unlocked_cheat": false,
   "wins": {
-    "bacteria": 16
+    "bacteria": 17,
+    "brainrot": 1
   }
 }

@@ -69,6 +69,26 @@ class Country:
             return 0.0
         return min(1.0, self.dead / self.population)
 
+    @property
+    def is_rich(self) -> bool:
+        return self.wealth == Wealth.RICH
+
+    @property
+    def is_poor(self) -> bool:
+        return self.wealth == Wealth.POOR
+
+    @property
+    def is_medium(self) -> bool:
+        return self.wealth == Wealth.MEDIUM
+
+    @property
+    def is_cold(self) -> bool:
+        return self.climate == Climate.COLD
+
+    @property
+    def is_hot(self) -> bool:
+        return self.climate == Climate.HOT
+
     def infect_initial(self, count: int = 10, current_day: int = 0) -> None:
         """Infiziert erste Patienten (z.B. Patient Null)."""
         actual_count = min(count, self.healthy)

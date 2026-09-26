@@ -235,3 +235,22 @@ def test_menu_view_carousel_and_selection():
     menu.draw(surf)
     surf_wide = pygame.Surface((2560, 1080))
     menu.draw(surf_wide)
+
+
+def test_all_pathogens_simulate_in_germany_without_crash():
+    """Simuliert jeden der 8 Erreger mit Startland Deutschland (deu, rich) über mehrere Tage."""
+    for ptype in PathogenType:
+        p = Pathogen(name=f"CrashTest_{ptype.value}", pathogen_type=ptype, starting_dna=50)
+        world = World(pathogen=p, difficulty_name="Normal")
+        world.select_starting_country("deu")
+        assert world.has_started is True
+        assert world.countries["deu"].is_infected is True
+        assert world.countries["deu"].is_rich is True
+
+        # 10 Tage durchsimulieren (prüft _advance_day, country.is_rich, Heilmittel etc.)
+        for _ in range(10):
+            world.update(1.0)  # Ein voller Tag pro Sekunde
+
+        assert world.current_day >= 10
+        assert world.total_infected > 0
+
