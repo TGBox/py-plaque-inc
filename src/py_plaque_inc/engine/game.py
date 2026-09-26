@@ -1,6 +1,7 @@
 """Zentraler Game-Loop und State-Machine für Py-Plaque-Inc."""
 
 from enum import Enum
+import sys
 from typing import Optional, Tuple
 import pygame
 
@@ -25,6 +26,18 @@ class PlagueGame:
     """Hauptspielklasse: initialisiert Pygame, Views, Auflösung und leitet Frames weiter."""
 
     def __init__(self):
+        # Windows DPI-Awareness aktivieren für verzerrungsfreie Mauskoordinaten
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                try:
+                    import ctypes
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
+
         pygame.init()
         pygame.display.set_caption(TITLE)
 
@@ -100,12 +113,7 @@ class PlagueGame:
             target_res = "1920x1080"
             if sizes:
                 dw, dh = sizes[0]
-                if dw >= 2560 and dh == 1080:
-                    target_res = "2560x1080"
-                elif dw >= 2560:
-                    target_res = f"{dw}x{dh}"
-                elif dw >= 1920:
-                    target_res = "1920x1080"
+                target_res = f"{dw}x{dh}"
             self.set_resolution(target_res, fullscreen=True)
 
     def start_new_game(
@@ -193,10 +201,19 @@ class PlagueGame:
         if hasattr(event, "pos"):
             mx, my = event.pos
             if self.scale > 0:
-                vx = int((mx - self.offset_x) / self.scale)
-                vy = int((my - self.offset_y) / self.scale)
-                vx = max(0, min(SCREEN_WIDTH - 1, vx))
-                vy = max(0, min(SCREEN_HEIGHT - 1, vy))
+                if (
+                    mx < self.offset_x
+                    or mx >= self.offset_x + self.scaled_w
+                    or my < self.offset_y
+                    or my >= self.offset_y + self.scaled_h
+                ):
+                    # Klick/Bewegung außerhalb der Spielfläche (in den Letterbox-Rändern)
+                    vx, vy = -9999, -9999
+                else:
+                    vx = int((mx - self.offset_x) / self.scale)
+                    vy = int((my - self.offset_y) / self.scale)
+                    vx = max(0, min(SCREEN_WIDTH - 1, vx))
+                    vy = max(0, min(SCREEN_HEIGHT - 1, vy))
                 event = pygame.event.Event(event.type, {**event.__dict__, "pos": (vx, vy)})
 
         # 4. Weiterleitung an aktive Ansicht
@@ -252,7 +269,7 @@ class PlagueGame:
 
         # 3. Skaliertes Blitting auf den physischen Bildschirm
         w, h = self.screen.get_size()
-        if self.scaled_w == w and self.scaled_h == h and self.offset_x == 0 and self.offset_y == 0:
+        if w == SCREEN_WIDTH and h == SCREEN_HEIGHT:
             self.screen.blit(self.virtual_screen, (0, 0))
         else:
             self.screen.fill(COLOR_BG)

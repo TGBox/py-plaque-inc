@@ -374,4 +374,60 @@ def test_menu_view_responsive_layout_widescreen_and_fullscreen():
     pygame.quit()
 
 
+def test_fullscreen_1080p_and_ultrawide_clicktarget_calculation():
+    """Prüft die exakte Klicktarget-Berechnung bei 1920x1080 (16:9 Vollbild) und 2560x1080 (Ultrawide)."""
+    game = PlagueGame()
+    game.start_new_game(pathogen_name="Target-Test", pathogen_type=PathogenType.BACTERIA, difficulty="Normal")
+    game.world.select_starting_country("deu")
+    assert game.state == GameState.PLAYING
+
+    # 1. 1920x1080 Full HD (Skalierung 1.5x, ohne Ränder)
+    game.set_resolution("1920x1080", fullscreen=True)
+    assert game.scale == 1.5
+    assert game.scaled_w == 1920
+    assert game.scaled_h == 1080
+    assert game.offset_x == 0
+    assert game.offset_y == 0
+
+    # Frame rendern (muss ohne Fehler skalieren)
+    game._draw()
+
+    # Klick auf den DNA-Badge im HUD bei 1920x1080:
+    # Das HUD-Element liegt virtuell bei hud.dna_rect.center (z.B. vx, vy)
+    vx, vy = game.game_view.hud.dna_rect.center
+    # Physische Position auf dem 1080p Bildschirm:
+    phys_x = int(vx * 1.5)
+    phys_y = int(vy * 1.5)
+
+    # Klick mit physischen Bildschirmkoordinaten senden
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (phys_x, phys_y), "button": 1}))
+    # Muss exakt das DNA-Badge treffen und die Evolution-View öffnen
+    assert game.state == GameState.EVOLUTION
+
+    # Zurück ins Spiel
+    game.state = GameState.PLAYING
+
+    # 2. 2560x1080 Ultrawide (Skalierung 1.5x, 320px Rand links und rechts)
+    game.set_resolution("2560x1080", fullscreen=False)
+    assert game.scale == 1.5
+    assert game.offset_x == 320
+    assert game.offset_y == 0
+
+    game._draw()
+
+    # Klick im linken schwarzen Rand (z.B. x=100, y=500)
+    # Darf keine Buttons oder Länder im Spielfeld aktivieren
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (100, 500), "button": 1}))
+    assert game.state == GameState.PLAYING
+
+    # Klick auf das DNA-Badge bei 2560x1080 (unter Berücksichtigung von offset_x = 320):
+    phys_x_uw = 320 + int(vx * 1.5)
+    phys_y_uw = int(vy * 1.5)
+    game._handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, {"pos": (phys_x_uw, phys_y_uw), "button": 1}))
+    assert game.state == GameState.EVOLUTION
+
+    pygame.quit()
+
+
+
 
